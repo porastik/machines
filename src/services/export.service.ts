@@ -229,12 +229,13 @@ export class ExportService {
     const t = (key: string) => this.translationService.getTranslation(key);
 
     // Prepare data
-    const headers = [t('DATE'), t('DEVICE'), t('MAINTENANCE_TYPE'), t('DURATION_MINUTES'), t('TECHNICIAN'), t('NOTES')];
+    const headers = [t('DATE'), t('DEVICE'), t('DEVICE_TYPE'), t('MAINTENANCE_TYPE'), t('DURATION_MINUTES'), t('TECHNICIAN'), t('NOTES')];
     const data = logs.map(log => {
       const device = devices.find(d => d.id === log.deviceId);
       return [
         new Date(log.date).toLocaleString(),
         device?.name || log.deviceId,
+        device?.type || log.deviceType || '-',
         log.type === 'scheduled' ? t('SCHEDULED') : t('EMERGENCY'),
         log.durationMinutes || 0,
         log.technician,
@@ -248,7 +249,8 @@ export class ExportService {
     worksheet['!cols'] = [
       { wch: 20 }, // Date
       { wch: 25 }, // Device
-      { wch: 15 }, // Type
+      { wch: 15 }, // Device Type
+      { wch: 15 }, // Maintenance Type
       { wch: 15 }, // Duration
       { wch: 20 }, // Technician
       { wch: 40 }  // Notes
