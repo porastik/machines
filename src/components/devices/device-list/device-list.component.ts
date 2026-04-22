@@ -23,6 +23,7 @@ export class DeviceListComponent {
   authService = inject(AuthService);
   
   devices = this.dataService.getDevicesSignal();
+  logs = this.dataService.getMaintenanceLogsSignal();
   searchTerm = signal('');
   showAddForm = signal(false);
   specificationFields = signal<{key: string, value: string}[]>([]);
@@ -30,6 +31,7 @@ export class DeviceListComponent {
   constructor() {
     // Načítať zariadenia pri inicializácii
     this.dataService.loadDevices().subscribe();
+    this.dataService.getMaintenanceLogs().subscribe();
   }
   
   addSpecificationField() {
@@ -82,6 +84,13 @@ export class DeviceListComponent {
       case 'offline': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
+  }
+
+  getDeviceDowntime(deviceId: string): string {
+    const deviceLogs = this.logs()().filter(log => log.deviceId === deviceId && log.type === 'emergency');
+    const totalMinutes = deviceLogs.reduce((total, log) => total + (log.durationMinutes || 0), 0);
+    const totalHours = totalMinutes / 60;
+    return totalHours > 0 ? `${totalHours.toFixed(1)}h` : '0h';
   }
 
   toggleAddForm() {

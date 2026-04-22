@@ -163,7 +163,7 @@
                   {{ ('STATUS_' + device.status.toUpperCase()) | translate }}
                 </span>
               </td>
-              <td class="py-3 px-4 text-gray-600">{{ device.downtime }}</td>
+              <td class="py-3 px-4 text-gray-600">{{ getDeviceDowntime(device.id) }}</td>
               <td class="py-3 px-4">
                 @if (device.maintenancePeriod) {
                   <span class="text-sm text-gray-600">{{ (device.maintenancePeriod.toUpperCase()) | translate }}</span>
