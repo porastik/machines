@@ -1,0 +1,50 @@
+<div class="checklist-container">
+  @if (loading()) {
+    <div class="loading-state">
+      <p>{{ 'LOADING' | translate }}...</p>
+    </div>
+  }
+
+  @if (!loading() && !checklist()) {
+    <div class="no-checklist">
+      <p class="text-gray-500">{{ 'NO_CHECKLIST_AVAILABLE' | translate }}</p>
+    </div>
+  }
+
+  @if (!loading() && checklist()) {
+    <div class="checklist-content">
+      <!-- Checklist Header -->
+      <div class="checklist-header">
+        <h3 class="checklist-title">{{ checklist()!.name }}</h3>
+        @if (checklist()!.description) {
+          <p class="checklist-description">{{ checklist()!.description }}</p>
+        }
+      </div>
+
+      <!-- Checklist Items -->
+      <div class="checklist-items">
+        @for (item of checklist()!.items; track item.id) {
+          <div class="checklist-item">
+            <div class="item-header">
+              <span class="item-number">{{ item.order_index }}.</span>
+              <span class="item-description">{{ item.task_description }}</span>
+              @if (item.is_mandatory) {
+                <span class="badge badge-mandatory">{{ 'MANDATORY' | translate }}</span>
+              }
+              @if (item.estimated_minutes) {
+                <span class="badge badge-time">⏱ {{ item.estimated_minutes }} min</span>
+              }
+            </div>
+            
+            @if (item.safety_note) {
+              <div class="item-safety-note">
+                <span class="safety-icon">⚠️</span>
+                <span class="safety-text">{{ item.safety_note }}</span>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>

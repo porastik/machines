@@ -48,12 +48,28 @@ export const APP_ROUTES: Routes = [
         loadComponent: () => import('./components/parts/part-list/part-list.component').then(c => c.PartListComponent) 
       },
       { 
+        path: 'suppliers', 
+        loadComponent: () => import('./components/parts/supplier-list/supplier-list.component').then(c => c.SupplierListComponent) 
+      },
+      { 
         path: 'maintenance', 
         loadComponent: () => import('./components/maintenance/maintenance-list/maintenance-list.component').then(c => c.MaintenanceListComponent) 
       },
       { 
         path: 'downtime', 
         loadComponent: () => import('./components/downtime/downtime.component').then(c => c.DowntimeComponent) 
+      },
+      { 
+        path: 'admin/checklists', 
+        loadComponent: () => import('./components/admin/checklist-manager/checklist-manager.component').then(c => c.ChecklistManagerComponent) 
+      },
+      { 
+        path: 'admin/users', 
+        loadComponent: () => import('./components/admin/user-manager/user-manager.component').then(c => c.UserManagerComponent) 
+      },
+      { 
+        path: 'admin/backup', 
+        loadComponent: () => import('./components/admin/backup-restore/backup-restore.component').then(c => c.BackupRestoreComponent) 
       },
     ]
   },

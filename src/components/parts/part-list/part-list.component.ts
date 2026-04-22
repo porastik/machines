@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { DataService } from '../../../services/data.service';
 import { AuthService } from '../../../services/auth.service';
+import { NotificationService } from '../../../core/services/notification.service';
 import { TranslatePipe } from '../../../pipes/translate.pipe';
 
 @Component({
@@ -14,6 +15,7 @@ import { TranslatePipe } from '../../../pipes/translate.pipe';
 })
 export class PartListComponent {
   private dataService = inject(DataService);
+  private notificationService = inject(NotificationService);
   authService = inject(AuthService);
   
   // Use the signal directly from DataService that gets updated
@@ -112,46 +114,42 @@ export class PartListComponent {
   increaseQuantity(partId: string, currentQuantity: number) {
     const notes = prompt('Dôvod zvýšenia množstva (POVINNÉ - napr. nákup, dodávka):');
     if (!notes || notes.trim() === '') {
-      alert('Poznámka je povinná pri zvýšení množstva');
+      this.notificationService.warning('Poznámka je povinná pri zvýšení množstva');
       return;
     }
     
-    console.log('➕ Increasing quantity for part:', partId);
     this.dataService.updatePartQuantity(partId, currentQuantity + 1, notes, 'increase').subscribe({
-      next: (updatedPart) => {
-        console.log('✅ Quantity increased:', updatedPart);
-        // Reload history after change
+      next: () => {
+        this.notificationService.success('Množstvo bolo zvýšené');
         setTimeout(() => this.loadPartsHistory(), 500);
       },
       error: (err) => {
-        console.error('❌ Error increasing quantity:', err);
-        alert('Error updating quantity: ' + err.message);
+        console.error('Error increasing quantity:', err);
+        this.notificationService.error('Chyba pri aktualizácii množstva: ' + err.message);
       }
     });
   }
 
   decreaseQuantity(partId: string, currentQuantity: number) {
     if (currentQuantity <= 0) {
-      alert('Množstvo nemôže byť záporné');
+      this.notificationService.warning('Množstvo nemôže byť záporné');
       return;
     }
     
     const notes = prompt('Dôvod zníženia množstva (POVINNÉ - napr. použité pri oprave CNC Fréza):');
     if (!notes || notes.trim() === '') {
-      alert('Poznámka je povinná pri znížení množstva');
+      this.notificationService.warning('Poznámka je povinná pri znížení množstva');
       return;
     }
     
-    console.log('➖ Decreasing quantity for part:', partId);
     this.dataService.updatePartQuantity(partId, currentQuantity - 1, notes, 'decrease').subscribe({
-      next: (updatedPart) => {
-        console.log('✅ Quantity decreased:', updatedPart);
-        // Reload history after change
+      next: () => {
+        this.notificationService.success('Množstvo bolo znížené');
         setTimeout(() => this.loadPartsHistory(), 500);
       },
       error: (err) => {
-        console.error('❌ Error decreasing quantity:', err);
-        alert('Error updating quantity: ' + err.message);
+        console.error('Error decreasing quantity:', err);
+        this.notificationService.error('Chyba pri aktualizácii množstva: ' + err.message);
       }
     });
   }
@@ -162,26 +160,24 @@ export class PartListComponent {
     
     const quantity = parseInt(input);
     if (isNaN(quantity) || quantity < 0) {
-      alert('Zadajte platné kladné číslo');
+      this.notificationService.warning('Zadajte platné kladné číslo');
       return;
     }
 
     const notes = prompt('Dôvod zmeny množstva (POVINNÉ - napr. inventúra, korekcia):');
     if (!notes || notes.trim() === '') {
-      alert('Poznámka je povinná pri zmene množstva');
+      this.notificationService.warning('Poznámka je povinná pri zmene množstva');
       return;
     }
     
-    console.log('✏️ Setting quantity for part:', partId, 'to', quantity);
     this.dataService.updatePartQuantity(partId, quantity, notes, 'set').subscribe({
-      next: (updatedPart) => {
-        console.log('✅ Quantity set:', updatedPart);
-        // Reload history after change
+      next: () => {
+        this.notificationService.success('Množstvo bolo nastavené');
         setTimeout(() => this.loadPartsHistory(), 500);
       },
       error: (err) => {
-        console.error('❌ Error setting quantity:', err);
-        alert('Error updating quantity: ' + err.message);
+        console.error('Error setting quantity:', err);
+        this.notificationService.error('Chyba pri aktualizácii množstva: ' + err.message);
       }
     });
   }
@@ -194,32 +190,30 @@ export class PartListComponent {
     const deviceId = formData.get('deviceId') as string;
     const selectedDevice = deviceId ? this.devices().find(d => d.id === deviceId) : undefined;
     
+    const minQtyValue = formData.get('minQuantity') as string;
+    const minQuantity = minQtyValue !== null && minQtyValue !== '' ? parseInt(minQtyValue, 10) : 0;
+    
     const newPart = {
       name: formData.get('name') as string,
       sku: formData.get('sku') as string,
-      quantity: parseInt(formData.get('quantity') as string),
-      minQuantity: parseInt(formData.get('minQuantity') as string) || 10,
+      quantity: parseInt(formData.get('quantity') as string, 10),
+      minQuantity: minQuantity,
       location: formData.get('location') as string,
       deviceId: deviceId || undefined,
       deviceName: selectedDevice?.name || undefined,
     };
 
-    console.log('🔄 Adding new part:', newPart);
-    
     this.dataService.addPart(newPart).subscribe({
-      next: (addedPart) => {
-        console.log('✅ Part added successfully:', addedPart);
+      next: () => {
+        this.notificationService.success('Náhradný diel bol úspešne pridaný');
         this.showAddForm.set(false);
         form.reset();
-        // Explicitne znovu načítať zoznam dielov a ich históriu
         this.dataService.getParts().subscribe(() => {
-          console.log('🔄 Parts list refreshed after adding new part');
           this.loadPartsHistory();
         });
       },
       error: (err) => {
-        console.error('❌ Error adding part:', err);
-        // Extract user-friendly message
+        console.error('Error adding part:', err);
         let errorMessage = 'Chyba pri pridávaní dielu';
         if (err.message) {
           if (err.message.includes('SKU už existuje')) {
@@ -228,7 +222,7 @@ export class PartListComponent {
             errorMessage = err.message;
           }
         }
-        alert(errorMessage);
+        this.notificationService.error(errorMessage);
       }
     });
   }
@@ -240,21 +234,16 @@ export class PartListComponent {
       return;
     }
 
-    console.log('🗑️ Deleting part:', partId);
-    
     this.dataService.deletePart(partId).subscribe({
       next: () => {
-        console.log('✅ Part deleted successfully');
-        alert(`Náhradný diel "${partName}" bol úspešne vymazaný.`);
-        // Explicitne znovu načítať zoznam dielov a ich históriu
+        this.notificationService.success(`Náhradný diel "${partName}" bol úspešne vymazaný.`);
         this.dataService.getParts().subscribe(() => {
-          console.log('🔄 Parts list refreshed after deletion');
           this.loadPartsHistory();
         });
       },
       error: (err) => {
-        console.error('❌ Error deleting part:', err);
-        alert(`Chyba pri vymazávaní dielu: ${err.message}`);
+        console.error('Error deleting part:', err);
+        this.notificationService.error(`Chyba pri vymazávaní dielu: ${err.message}`);
       }
     });
   }

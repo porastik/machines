@@ -30,11 +30,51 @@ export interface Database {
           sku: string;
           quantity: number;
           location: string;
+          supplier_id: string | null;
+          current_price: number | null;
+          currency: string | null;
+          serial_number: string | null;
+          batch_number: string | null;
+          expiry_date: string | null;
+          manufacturing_date: string | null;
+          warranty_months: number | null;
           created_at: string;
           updated_at: string;
         };
         Insert: Omit<Database['public']['Tables']['spare_parts']['Row'], 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Database['public']['Tables']['spare_parts']['Insert']>;
+      };
+      suppliers: {
+        Row: {
+          id: string;
+          name: string;
+          contact_person: string | null;
+          email: string | null;
+          phone: string | null;
+          address: string | null;
+          website: string | null;
+          notes: string | null;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['suppliers']['Row'], 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['suppliers']['Insert']>;
+      };
+      part_price_history: {
+        Row: {
+          id: string;
+          part_id: string;
+          price: number;
+          currency: string;
+          supplier_id: string | null;
+          effective_date: string;
+          notes: string | null;
+          changed_by: string;
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['part_price_history']['Row'], 'id' | 'created_at'>;
+        Update: Partial<Database['public']['Tables']['part_price_history']['Insert']>;
       };
       maintenance_logs: {
         Row: {
@@ -62,6 +102,18 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['users']['Row'], 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Database['public']['Tables']['users']['Insert']>;
       };
+      profiles: {
+        Row: {
+          id: string;
+          email: string;
+          name: string | null;
+          role: 'admin' | 'technician';
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['profiles']['Row'], 'created_at' | 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['profiles']['Insert']>;
+      };
     };
   };
 }
@@ -81,6 +133,8 @@ export class SupabaseService {
           persistSession: true,
           autoRefreshToken: true,
           detectSessionInUrl: true,
+          storage: window.localStorage,
+          storageKey: 'supabase.auth.token',
         },
       }
     );

@@ -58,11 +58,34 @@ export class AuthService {
       return;
     }
 
-    // Supabase mode - skontrolovať session
+    // Supabase mode - skontrolovať localStorage pre tokens a načítať používateľa
     try {
-      const { data: { session } } = await this.supabaseService.auth.getSession();
-      if (session?.user) {
-        await this.loadUserProfile(session.user.id);
+      console.log('Initializing auth...');
+      const storedUser = localStorage.getItem('currentUser');
+      
+      if (storedUser) {
+        try {
+          const user = JSON.parse(storedUser);
+          console.log('Found stored user:', user);
+          this.currentUser.set(user);
+          
+          // Skontrolovať či existuje aj token
+          const tokenData = localStorage.getItem('supabase.auth.token');
+          if (tokenData) {
+            console.log('Found stored auth token');
+          } else {
+            console.log('No auth token found, user may need to re-login');
+          }
+        } catch (error) {
+          console.error('Error parsing stored user:', error);
+          this.clearAuthData();
+        }
+      } else {
+        // Fallback - skúsiť načítať session zo Supabase
+        const { data: { session } } = await this.supabaseService.auth.getSession();
+        if (session?.user) {
+          await this.loadUserProfile(session.user.id);
+        }
       }
     } catch (error) {
       console.error('Error initializing auth:', error);
@@ -89,25 +112,47 @@ export class AuthService {
    */
   private async loadUserProfile(userId: string): Promise<void> {
     try {
+      console.log('Loading user profile for ID:', userId);
+      
+      // Načítať profil z tabuľky 'profiles' (nie 'users')
       const { data, error } = await this.supabaseService.db
-        .from('users')
+        .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading profile from database:', error);
+        throw error;
+      }
 
       if (data) {
         const user: User = {
           id: (data as any).id,
           email: (data as any).email,
-          role: (data as any).role,
+          role: (data as any).role || 'technician',
         };
+        console.log('User profile loaded:', user);
         this.currentUser.set(user);
         localStorage.setItem('currentUser', JSON.stringify(user));
       }
     } catch (error) {
       console.error('Error loading user profile:', error);
+      // Skúsiť získať základné info z auth session
+      try {
+        const { data: { session } } = await this.supabaseService.auth.getSession();
+        if (session?.user) {
+          const user: User = {
+            id: session.user.id,
+            email: session.user.email || '',
+            role: (session.user.user_metadata?.role || session.user.app_metadata?.role || 'technician') as 'admin' | 'technician',
+          };
+          this.currentUser.set(user);
+          localStorage.setItem('currentUser', JSON.stringify(user));
+        }
+      } catch (fallbackError) {
+        console.error('Fallback profile load also failed:', fallbackError);
+      }
     }
   }
 
@@ -121,7 +166,7 @@ export class AuthService {
     // Pre development môžeme používať mock prihlásenie
     if (environment.enableMockData) {
       console.log('Using mock login');
-      const role = email.includes('admin') ? 'admin' : 'technician';
+      const role = email.includes('admin') ? 'admin' : email.includes('user') ? 'user' : 'technician';
       return this.mockLogin(role);
     }
 
@@ -131,7 +176,7 @@ export class AuthService {
   /**
    * Prihlásenie používateľa (legacy metóda pre spätnu kompatibilitu)
    */
-  login(role: 'admin' | 'technician', password?: string): Observable<boolean> {
+  login(role: 'admin' | 'technician' | 'user', password?: string): Observable<boolean> {
     console.log('login() called with role:', role);
     console.log('enableMockData:', environment.enableMockData);
     
@@ -188,7 +233,8 @@ export class AuthService {
         // Načítať user profile priamo cez fetch (pretože Supabase klient nefunguje)
         console.log('Loading user profile for ID:', data.user.id);
         try {
-          const profileRes = await fetch(`${environment.supabase.url}/rest/v1/users?id=eq.${data.user.id}`, {
+          // Dotaz na tabuľku profiles (nie users!)
+          const profileRes = await fetch(`${environment.supabase.url}/rest/v1/profiles?id=eq.${data.user.id}`, {
             headers: {
               'apikey': environment.supabase.anonKey,
               'Authorization': `Bearer ${data.access_token}`,
@@ -196,7 +242,7 @@ export class AuthService {
           });
           
           const profiles = await profileRes.json();
-          console.log('Profile response:', profiles);
+          console.log('Profile response from profiles table:', profiles);
           
           if (profiles && profiles.length > 0) {
             const profile = profiles[0];
@@ -300,9 +346,9 @@ export class AuthService {
   /**
    * Mock prihlásenie pre development
    */
-  private mockLogin(role: 'admin' | 'technician'): Observable<boolean> {
+  private mockLogin(role: 'admin' | 'technician' | 'user'): Observable<boolean> {
     const user: User = {
-      id: role === 'admin' ? '1' : '2',
+      id: role === 'admin' ? '1' : role === 'technician' ? '2' : '3',
       email: `${role}@example.com`,
       role: role,
     };
@@ -411,6 +457,29 @@ export class AuthService {
   }
 
   /**
+   * Kontrola či je používateľ technik
+   */
+  isTechnician(): boolean {
+    return this.currentUser()?.role === 'technician';
+  }
+
+  /**
+   * Kontrola či je používateľ s rolou 'user' (len čítanie)
+   */
+  isReadOnlyUser(): boolean {
+    return this.currentUser()?.role === 'user';
+  }
+
+  /**
+   * Kontrola či používateľ môže editovať, pridávať a mazať údaje
+   * Admin a Technician môžu editovať, User môže len čítať
+   */
+  canEdit(): boolean {
+    const role = this.currentUser()?.role;
+    return role === 'admin' || role === 'technician';
+  }
+
+  /**
    * Kontrola či je používateľ prihlásený
    */
   async isAuthenticated(): Promise<boolean> {
@@ -420,5 +489,203 @@ export class AuthService {
 
     const { data } = await this.supabaseService.auth.getSession();
     return !!data.session;
+  }
+
+  /**
+   * Admin - Získať všetkých používateľov
+   */
+  async getAllUsers(): Promise<any[]> {
+    try {
+      const token = localStorage.getItem('supabase.auth.token');
+      if (!token) {
+        console.error('No auth token found');
+        return [];
+      }
+
+      const tokenData = JSON.parse(token);
+      const accessToken = tokenData.access_token;
+
+      // Get all users except deleted ones
+      const response = await fetch(
+        `${environment.supabase.url}/rest/v1/profiles?role=neq.deleted&order=created_at.desc&select=*`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': environment.supabase.anonKey,
+            'Authorization': `Bearer ${accessToken}`,
+            'Prefer': 'return=representation'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error fetching users:', response.status, errorText);
+        throw new Error(`Failed to fetch users: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data || [];
+    } catch (error) {
+      console.error('Error in getAllUsers:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Admin - Vytvoriť nového používateľa
+   */
+  async createUser(userData: { email: string; name: string; role: string; password: string }): Promise<void> {
+    console.log('Creating user:', userData);
+    
+    try {
+      // Create user via Supabase Auth API
+      const signUpResponse = await fetch(`${environment.supabase.url}/auth/v1/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': environment.supabase.anonKey,
+        },
+        body: JSON.stringify({
+          email: userData.email,
+          password: userData.password,
+          data: {
+            name: userData.name,
+            role: userData.role
+          }
+        })
+      });
+
+      const signUpData = await signUpResponse.json();
+      console.log('SignUp response:', signUpData);
+
+      if (!signUpResponse.ok) {
+        throw new Error(signUpData.error_description || signUpData.msg || 'Failed to create user');
+      }
+
+      if (!signUpData.user) {
+        throw new Error('No user data returned');
+      }
+
+      // Get token for profile update
+      const tokenData = localStorage.getItem('supabase.auth.token');
+      let accessToken = null;
+      if (tokenData) {
+        const parsed = JSON.parse(tokenData);
+        accessToken = parsed.access_token;
+      }
+
+      // Update/create profile with REST API
+      const profileResponse = await fetch(`${environment.supabase.url}/rest/v1/profiles`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': environment.supabase.anonKey,
+          'Authorization': `Bearer ${accessToken}`,
+          'Prefer': 'resolution=merge-duplicates'
+        },
+        body: JSON.stringify({
+          id: signUpData.user.id,
+          email: userData.email,
+          name: userData.name,
+          role: userData.role
+        })
+      });
+
+      if (!profileResponse.ok) {
+        const errorData = await profileResponse.json();
+        console.error('Profile creation error:', errorData);
+        throw new Error(errorData.message || 'Failed to create profile');
+      }
+
+      console.log('User created successfully');
+    } catch (error) {
+      console.error('Error in createUser:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Admin - Aktualizovať používateľa
+   */
+  async updateUser(userId: string, updates: { email?: string; name?: string; role?: string; password?: string }): Promise<void> {
+    console.log('Updating user:', userId, updates);
+    
+    const tokenData = localStorage.getItem('supabase.auth.token');
+    let accessToken = null;
+    if (tokenData) {
+      const parsed = JSON.parse(tokenData);
+      accessToken = parsed.access_token;
+    }
+
+    // Note: Email and password updates require service_role key (admin API)
+    // For now, we'll only update profile data (name, role)
+    if (updates.email || updates.password) {
+      console.warn('Email/password updates require admin API - not supported in this implementation');
+    }
+
+    // Update profile
+    const profileUpdates: any = {};
+    if (updates.name) profileUpdates.name = updates.name;
+    if (updates.role) profileUpdates.role = updates.role;
+    if (updates.email) profileUpdates.email = updates.email;
+
+    if (Object.keys(profileUpdates).length > 0) {
+      const response = await fetch(`${environment.supabase.url}/rest/v1/profiles?id=eq.${userId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': environment.supabase.anonKey,
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify(profileUpdates)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error updating profile:', errorData);
+        throw new Error(errorData.message || 'Failed to update profile');
+      }
+
+      console.log('User updated successfully');
+    }
+  }
+
+  /**
+   * Admin - Deaktivovať používateľa (soft delete)
+   * Skutočné zmazanie vyžaduje service_role kľúč, ktorý nemôžeme použiť na frontende
+   */
+  async deleteUser(userId: string): Promise<void> {
+    console.log('Deactivating user:', userId);
+    
+    const tokenData = localStorage.getItem('supabase.auth.token');
+    let accessToken = null;
+    if (tokenData) {
+      const parsed = JSON.parse(tokenData);
+      accessToken = parsed.access_token;
+    }
+    
+    // Soft delete - mark user as inactive in profiles
+    const response = await fetch(`${environment.supabase.url}/rest/v1/profiles?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': environment.supabase.anonKey,
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({ 
+        role: 'deleted',
+        name: '[Deleted User]'
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Error deactivating user:', errorData);
+      throw new Error(errorData.message || 'Failed to deactivate user');
+    }
+
+    console.log('User deactivated successfully');
   }
 }

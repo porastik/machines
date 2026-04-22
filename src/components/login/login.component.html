@@ -53,16 +53,19 @@
           [disabled]="isLoading()"
           class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <span *ngIf="!isLoading()">{{ 'SIGN_IN' | translate }}</span>
-          <span *ngIf="isLoading()">{{ 'LOADING' | translate }}</span>
+          @if (!isLoading()) {
+            {{ 'SIGN_IN' | translate }}
+          } @else {
+            {{ 'LOADING' | translate }}
+          }
         </button>
       </div>
 
       <div class="mt-4 text-xs text-gray-500 text-center space-y-1">
-        <p><strong>Demo účty:</strong></p>
-        <p>Admin: admin@example.com</p>
-        <p>Technik: technician@example.com</p>
-        <p>Heslo: password123</p>
+        <p><strong>Účty:</strong></p>
+        <p>Admin: auotns@gmail.com</p>
+        <p>Technik: technik@auo.com</p>
+        <p>User (len čítanie): user@auo.com</p>
       </div>
     </form>
   </div>

@@ -1,18 +1,20 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
 import { DataService } from '../../../services/data.service';
 import { AuthService } from '../../../services/auth.service';
+import { NotificationService } from '../../../core/services/notification.service';
 import { QrCodeComponent } from '../../shared/qr-code/qr-code.component';
+import { ChecklistComponent } from '../../shared/checklist/checklist.component';
 import { Device } from '../../../models';
 import { TranslatePipe } from '../../../pipes/translate.pipe';
 
 @Component({
   selector: 'app-device-detail',
   standalone: true,
-  imports: [CommonModule, RouterLink, QrCodeComponent, TranslatePipe],
+  imports: [CommonModule, RouterLink, QrCodeComponent, ChecklistComponent, TranslatePipe],
   templateUrl: './device-detail.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -20,6 +22,7 @@ export class DeviceDetailComponent {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private dataService = inject(DataService);
+  private notificationService = inject(NotificationService);
   authService = inject(AuthService);
 
   // Use signal that gets updated when devices change
@@ -59,23 +62,24 @@ export class DeviceDetailComponent {
     }
     
     if (!notes || notes.trim() === '') {
-      alert('Prosím zadajte poznámky k údržbe.');
+      this.notificationService.warning('Prosím zadajte poznámky k údržbe.');
       return;
     }
 
     if (!durationMinutes || durationMinutes < 15) {
-      alert('Minimálne trvanie údržby je 15 minút.');
+      this.notificationService.warning('Minimálne trvanie údržby je 15 minút.');
       return;
     }
     
     const typeLabel = type === 'scheduled' ? '📅 Plánovaná' : '🚨 Neodkladná';
     const durationHours = (durationMinutes / 60).toFixed(1);
+    const maintenanceDate = new Date();
     console.log(`📝 Logging ${type} maintenance for device:`, dev.name, 'Duration:', durationMinutes, 'minutes');
     
     this.dataService.addMaintenanceLog({
       deviceId: dev.id,
       deviceName: dev.name,
-      date: new Date().toISOString().split('T')[0],
+      date: maintenanceDate.toISOString(),
       technician: user.email,
       notes: notes.trim(),
       type: type,
@@ -83,11 +87,45 @@ export class DeviceDetailComponent {
     }).subscribe({
       next: (log) => {
         console.log('✅ Maintenance log saved:', log);
-        alert(`Údržba zariadenia "${dev.name}" bola úspešne zaznamenaná.\n\nTyp: ${typeLabel}\nTechnik: ${user.email}\nDátum: ${new Date().toLocaleDateString('sk-SK')}\nTrvanie: ${durationMinutes} minút (${durationHours}h)\n\nPoznámky: ${notes.trim()}`);
+        
+        // Ak je to plánovaná údržba, aktualizuj dátumy údržby na zariadení
+        if (type === 'scheduled' && dev.maintenancePeriod) {
+          const lastMaintenanceStr = maintenanceDate.toISOString().split('T')[0];
+          
+          // Vypočítať nasledujúcu údržbu podľa periódy
+          const nextMaintenanceDate = new Date(maintenanceDate);
+          switch (dev.maintenancePeriod) {
+            case 'monthly':
+              nextMaintenanceDate.setMonth(nextMaintenanceDate.getMonth() + 1);
+              break;
+            case 'quarterly':
+              nextMaintenanceDate.setMonth(nextMaintenanceDate.getMonth() + 3);
+              break;
+            case 'semi-annually':
+              nextMaintenanceDate.setMonth(nextMaintenanceDate.getMonth() + 6);
+              break;
+            case 'annually':
+              nextMaintenanceDate.setFullYear(nextMaintenanceDate.getFullYear() + 1);
+              break;
+          }
+          const nextMaintenanceStr = nextMaintenanceDate.toISOString().split('T')[0];
+          
+          console.log('📅 Updating maintenance dates - Last:', lastMaintenanceStr, 'Next:', nextMaintenanceStr);
+          
+          this.dataService.updateDeviceMaintenance(dev.id, lastMaintenanceStr, nextMaintenanceStr).subscribe({
+            next: (updatedDevice) => {
+              console.log('✅ Device maintenance dates updated:', updatedDevice);
+            },
+            error: (err) => {
+              console.error('❌ Error updating maintenance dates:', err);
+            }
+          });
+        }
+        
+        this.notificationService.success(`Údržba zariadenia "${dev.name}" bola úspešne zaznamenaná.\nTyp: ${typeLabel}\nTrvanie: ${durationMinutes} minút`);
       },
       error: (err) => {
-        console.error('❌ Error logging maintenance:', err);
-        alert(`Chyba pri zaznamenávaní údržby: ${err.message}`);
+        this.notificationService.error(`Chyba pri zaznamenávaní údržby: ${err.message}`);
       }
     });
   }
@@ -115,14 +153,12 @@ export class DeviceDetailComponent {
     console.log('🗑️ Decommissioning device:', dev.id);
     this.dataService.deleteDevice(dev.id).subscribe({
       next: () => {
-        console.log('✅ Device successfully decommissioned');
-        alert(`Zariadenie "${dev.name}" bolo úspešne vyradené.`);
+        this.notificationService.success(`Zariadenie "${dev.name}" bolo úspešne vyradené.`);
         // Navigate back to devices list
         this.router.navigate(['/devices']);
       },
       error: (err) => {
-        console.error('❌ Error decommissioning device:', err);
-        alert(`Chyba pri vyraďovaní zariadenia: ${err.message}`);
+        this.notificationService.error(`Chyba pri vyraďovaní zariadenia: ${err.message}`);
       }
     });
   }
@@ -139,14 +175,14 @@ export class DeviceDetailComponent {
     
     // Kontrola či je to PDF
     if (file.type !== 'application/pdf') {
-      alert('Môžete nahrať len PDF súbory.');
+      this.notificationService.warning('Môžete nahrať len PDF súbory.');
       input.value = '';
       return;
     }
 
     // Kontrola veľkosti (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
-      alert('Súbor je príliš veľký. Maximálna veľkosť je 10MB.');
+      this.notificationService.warning('Súbor je príliš veľký. Maximálna veľkosť je 10MB.');
       input.value = '';
       return;
     }
@@ -155,13 +191,11 @@ export class DeviceDetailComponent {
     
     this.dataService.uploadDeviceManual(dev.id, file).subscribe({
       next: (url) => {
-        console.log('✅ Manual uploaded successfully:', url);
-        alert(`Manuál "${file.name}" bol úspešnenahraný.`);
+        this.notificationService.success(`Manuál "${file.name}" bol úspešne nahraný.`);
         input.value = '';
       },
       error: (err) => {
-        console.error('❌ Error uploading manual:', err);
-        alert(`Chyba pri nahrávaní manuálu: ${err.message}`);
+        this.notificationService.error(`Chyba pri nahrávaní manuálu: ${err.message}`);
         input.value = '';
       }
     });
@@ -175,25 +209,21 @@ export class DeviceDetailComponent {
     }
 
     if (!inspectionDate || inspectionDate.trim() === '') {
-      alert('Prosím zadajte dátum revízie.');
+      this.notificationService.warning('Prosím zadajte dátum revízie.');
       return;
     }
 
     if (![1, 2, 3, 4, 5, 10].includes(period)) {
-      alert('Prosím vyberte platnú periódu.');
+      this.notificationService.warning('Prosím vyberte platnú periódu.');
       return;
     }
 
-    console.log('⚡ Updating electrical inspection:', inspectionDate, period);
-    
     this.dataService.updateElectricalInspection(dev.id, inspectionDate, period as 1 | 2 | 3 | 4 | 5 | 10).subscribe({
       next: (updatedDevice) => {
-        console.log('✅ Electrical inspection updated:', updatedDevice);
-        alert(`Elektrická revízia zariadenia "${dev.name}" bola úspešne aktualizovaná.\n\nDátum: ${inspectionDate}\nPlatnosť: ${period} ${period === 1 ? 'rok' : (period < 5 ? 'roky' : 'rokov')}\nExpirácia: ${updatedDevice.electricalInspectionExpiry}`);
+        this.notificationService.success(`Elektrická revízia zariadenia "${dev.name}" bola úspešne aktualizovaná.`);
       },
       error: (err) => {
-        console.error('❌ Error updating electrical inspection:', err);
-        alert(`Chyba pri aktualizácii revízie: ${err.message}`);
+        this.notificationService.error(`Chyba pri aktualizácii revízie: ${err.message}`);
       }
     });
   }

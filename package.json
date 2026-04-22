@@ -16,12 +16,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/idea3dsvk/machines.git"
+    "url": "https://github.com/porastik/machines.git"
   },
   "bugs": {
-    "url": "https://github.com/idea3dsvk/machines/issues"
+    "url": "https://github.com/porastik/machines/issues"
   },
-  "homepage": "https://idea3dsvk.github.io/machines/",
+  "homepage": "https://porastik.github.io/machines/",
   "private": false,
   "type": "module",
   "scripts": {
@@ -44,12 +44,17 @@
     "@angular/platform-browser": "^20.3.0",
     "@angular/router": "^20.3.9",
     "@supabase/supabase-js": "^2.78.0",
+    "chart.js": "^4.5.1",
+    "jspdf": "^4.0.0",
+    "jspdf-autotable": "^5.0.7",
     "rxjs": "^7.8.2",
     "tailwindcss": "latest",
+    "xlsx": "^0.18.5",
     "zone.js": "^0.15.1"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",
+    "angular-cli-ghpages": "^3.0.2",
     "gh-pages": "^6.3.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"

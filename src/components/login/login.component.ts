@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
 import { TranslatePipe } from '../../pipes/translate.pipe';
@@ -7,7 +8,7 @@ import { NotificationService } from '../../core/services/notification.service';
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [TranslatePipe, FormsModule],
+  imports: [CommonModule, TranslatePipe, FormsModule],
   templateUrl: './login.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

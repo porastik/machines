@@ -4,6 +4,8 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { DataService } from '../../../services/data.service';
 import { ExportService } from '../../../services/export.service';
+import { AuthService } from '../../../services/auth.service';
+import { NotificationService } from '../../../core/services/notification.service';
 import { Device } from '../../../models';
 import { TranslatePipe } from '../../../pipes/translate.pipe';
 
@@ -17,6 +19,8 @@ import { TranslatePipe } from '../../../pipes/translate.pipe';
 export class DeviceListComponent {
   private dataService = inject(DataService);
   private exportService = inject(ExportService);
+  private notificationService = inject(NotificationService);
+  authService = inject(AuthService);
   
   devices = this.dataService.getDevicesSignal();
   searchTerm = signal('');
@@ -94,7 +98,7 @@ export class DeviceListComponent {
     // Kontrola či ID už neexistuje
     const existingDevice = this.devices().find(d => d.id === customId);
     if (existingDevice) {
-      alert(`Zariadenie s ID "${customId}" už existuje! Použite iné ID.`);
+      this.notificationService.error(`Zariadenie s ID "${customId}" už existuje! Použite iné ID.`);
       return;
     }
 
@@ -103,11 +107,11 @@ export class DeviceListComponent {
     // Validácia fotky
     if (imageFile && imageFile.size > 0) {
       if (imageFile.size > 5 * 1024 * 1024) {
-        alert('Fotka je príliš veľká! Maximálna veľkosť je 5 MB.');
+        this.notificationService.error('Fotka je príliš veľká! Maximálna veľkosť je 5 MB.');
         return;
       }
       if (!imageFile.type.startsWith('image/')) {
-        alert('Neplatný formát súboru! Nahrajte obrázok (JPG, PNG, WebP).');
+        this.notificationService.error('Neplatný formát súboru! Nahrajte obrázok (JPG, PNG, WebP).');
         return;
       }
     }
@@ -144,7 +148,6 @@ export class DeviceListComponent {
     this.specificationFields().forEach(spec => {
       if (spec.key.trim()) {
         const trimmedValue = spec.value.trim();
-        // Konvertovať na číslo iba ak hodnota obsahuje VÝHRADNE číslice a desatinnú bodku/čiarku
         const numValue = parseFloat(trimmedValue.replace(',', '.'));
         const isOnlyNumber = /^-?\d+([.,]\d+)?$/.test(trimmedValue);
         
@@ -170,39 +173,33 @@ export class DeviceListComponent {
       lastStatusChange: new Date().toISOString(),
     };
 
-    console.log('Adding new device with custom ID:', newDevice);
-    
     this.dataService.addDevice(newDevice).subscribe({
       next: (addedDevice) => {
-        console.log('✅ Device successfully added:', addedDevice);
-        
         // Ak je fotka, nahrať ju
         if (imageFile && imageFile.size > 0) {
-          console.log('📤 Uploading device image...');
           this.dataService.uploadDeviceImage(addedDevice.id, imageFile).subscribe({
-            next: (imageUrl) => {
-              console.log('✅ Image uploaded successfully:', imageUrl);
+            next: () => {
               form.reset();
               this.showAddForm.set(false);
-              alert(`Zariadenie "${addedDevice.name}" bolo úspešne pridané s fotkou!`);
+              this.notificationService.success(`Zariadenie "${addedDevice.name}" bolo úspešne pridané s fotkou!`);
             },
             error: (err) => {
-              console.error('❌ Error uploading image:', err);
+              console.error('Error uploading image:', err);
               form.reset();
               this.showAddForm.set(false);
-              alert(`Zariadenie "${addedDevice.name}" bolo pridané, ale fotka sa nepodarila nahrať: ${err.message}`);
+              this.notificationService.warning(`Zariadenie "${addedDevice.name}" bolo pridané, ale fotka sa nepodarila nahrať.`);
             }
           });
         } else {
           form.reset();
           this.showAddForm.set(false);
-          this.specificationFields.set([]); // Vyčistiť špecifikácie
-          alert(`Zariadenie "${addedDevice.name}" bolo úspešne pridané!`);
+          this.specificationFields.set([]);
+          this.notificationService.success(`Zariadenie "${addedDevice.name}" bolo úspešne pridané!`);
         }
       },
       error: (err) => {
-        console.error('❌ Error adding device:', err);
-        alert(`Chyba pri pridávaní zariadenia: ${err.message}`);
+        console.error('Error adding device:', err);
+        this.notificationService.error(`Chyba pri pridávaní zariadenia: ${err.message}`);
       }
     });
   }
@@ -211,16 +208,15 @@ export class DeviceListComponent {
     const devices = this.devices();
     
     if (devices.length === 0) {
-      alert('Nie sú žiadne zariadenia na export.');
+      this.notificationService.warning('Nie sú žiadne zariadenia na export.');
       return;
     }
 
     const timestamp = new Date().toISOString().split('T')[0];
     const filename = `zariadenia-export-${timestamp}.csv`;
     
-    console.log(`📤 Exporting ${devices.length} devices to ${filename}`);
     this.exportService.exportDevicesToCsv(devices, filename);
     
-    alert(`Úspešne exportovaných ${devices.length} zariadení do súboru ${filename}`);
+    this.notificationService.success(`Úspešne exportovaných ${devices.length} zariadení do súboru ${filename}`);
   }
 }

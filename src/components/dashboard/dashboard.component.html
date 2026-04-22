@@ -86,15 +86,91 @@
     </div>
   </div>
 
+  <!-- Scheduled Maintenance This Month -->
+  <div class="mt-8 bg-white p-6 rounded-lg shadow-md">
+    <h2 class="text-xl font-semibold text-gray-800 mb-4">📅 {{ 'SCHEDULED_MAINTENANCE_THIS_MONTH' | translate }} ({{ devicesWithScheduledMaintenance().length }})</h2>
+    @if (devicesWithScheduledMaintenance().length > 0) {
+      <div class="overflow-x-auto">
+        <table class="w-full text-left">
+          <thead>
+            <tr class="text-xs text-gray-500 uppercase border-b">
+              <th class="py-2 px-4">{{ 'DEVICE' | translate }}</th>
+              <th class="py-2 px-4">{{ 'LOCATION' | translate }}</th>
+              <th class="py-2 px-4">{{ 'LAST_MAINTENANCE' | translate }}</th>
+              <th class="py-2 px-4">{{ 'NEXT_MAINTENANCE' | translate }}</th>
+              <th class="py-2 px-4">{{ 'DAYS_REMAINING' | translate }}</th>
+              <th class="py-2 px-4">{{ 'STATUS' | translate }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (device of devicesWithScheduledMaintenance(); track device.id) {
+              <tr class="border-b hover:bg-gray-50">
+                <td class="py-3 px-4">
+                  <a [routerLink]="['/devices', device.id]" class="text-blue-600 hover:underline">
+                    <div class="font-medium">{{ device.name }}</div>
+                    <div class="text-xs text-gray-500">{{ device.type }}</div>
+                  </a>
+                </td>
+                <td class="py-3 px-4 text-sm text-gray-600">{{ device.location }}</td>
+                <td class="py-3 px-4 text-sm text-gray-600">{{ device.lastMaintenanceDate }}</td>
+                <td class="py-3 px-4 text-sm text-gray-800 font-medium">{{ device.nextMaintenanceDate }}</td>
+                <td class="py-3 px-4">
+                  @if (device.daysUntilMaintenance <= 0) {
+                    <span class="px-2 py-1 text-xs font-semibold text-red-800 bg-red-100 rounded-full">
+                      {{ 'OVERDUE' | translate }}
+                    </span>
+                  } @else if (device.daysUntilMaintenance <= 7) {
+                    <span class="px-2 py-1 text-xs font-semibold text-orange-800 bg-orange-100 rounded-full">
+                      {{ device.daysUntilMaintenance }} {{ 'DAYS' | translate }}
+                    </span>
+                  } @else {
+                    <span class="px-2 py-1 text-xs font-semibold text-blue-800 bg-blue-100 rounded-full">
+                      {{ device.daysUntilMaintenance }} {{ 'DAYS' | translate }}
+                    </span>
+                  }
+                </td>
+                <td class="py-3 px-4">
+                  @if (device.status === 'operational') {
+                    <span class="px-2 py-1 text-xs font-semibold text-green-800 bg-green-100 rounded-full">{{ 'OPERATIONAL' | translate }}</span>
+                  } @else if (device.status === 'maintenance') {
+                    <span class="px-2 py-1 text-xs font-semibold text-yellow-800 bg-yellow-100 rounded-full">{{ 'MAINTENANCE_STATUS' | translate }}</span>
+                  } @else {
+                    <span class="px-2 py-1 text-xs font-semibold text-red-800 bg-red-100 rounded-full">{{ 'OFFLINE' | translate }}</span>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <div class="text-center py-8 text-gray-500">
+        <svg class="mx-auto h-12 w-12 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        <p class="font-medium">{{ 'NO_SCHEDULED_MAINTENANCE' | translate }}</p>
+        <p class="text-sm mt-2">{{ 'NO_DEVICES_WITH_MAINTENANCE_PERIOD' | translate }}</p>
+      </div>
+    }
+  </div>
+
   <!-- Recent Activity -->
   @if (recentLogs().length > 0) {
     <div class="mt-8 bg-white p-6 rounded-lg shadow-md">
-      <h2 class="text-xl font-semibold text-gray-800">{{ 'RECENT_MAINTENANCE_ACTIVITY' | translate }}</h2>
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold text-gray-800">{{ 'RECENT_MAINTENANCE_ACTIVITY' | translate }}</h2>
+        <button 
+          (click)="exportMaintenanceLogsToExcel()"
+          class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center gap-2">
+          📊 {{ 'EXPORT_ALL_LOGS' | translate }}
+        </button>
+      </div>
       <div class="mt-4">
         <table class="w-full text-left">
           <thead>
             <tr class="text-xs text-gray-500 uppercase border-b">
               <th class="py-2 px-4">{{ 'DEVICE' | translate }}</th>
+              <th class="py-2 px-4">{{ 'DEVICE_TYPE' | translate }}</th>
               <th class="py-2 px-4">{{ 'TECHNICIAN' | translate }}</th>
               <th class="py-2 px-4">{{ 'DATE' | translate }}</th>
               <th class="py-2 px-4">{{ 'TYPE' | translate }}</th>
@@ -104,6 +180,7 @@
             @for (log of recentLogs(); track log.id) {
               <tr class="border-b hover:bg-gray-50">
                 <td class="py-3 px-4 text-sm text-gray-800">{{ log.deviceName }}</td>
+                <td class="py-3 px-4 text-sm text-gray-600">{{ log.deviceType || '-' }}</td>
                 <td class="py-3 px-4 text-sm text-gray-600">{{ log.technician }}</td>
                 <td class="py-3 px-4 text-sm text-gray-600">{{ log.date }}</td>
                 <td class="py-3 px-4 text-sm">

@@ -1,0 +1,93 @@
+<div class="user-manager">
+  <div class="header">
+    <h2>{{ t.getTranslation('USER_MANAGEMENT') }}</h2>
+    <button class="btn btn-primary" (click)="openCreateForm()">
+      {{ t.getTranslation('CREATE_USER') }}
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="loading">{{ t.getTranslation('LOADING') }}...</div>
+  } @else {
+    <div class="user-list">
+      @for (user of users(); track user.id) {
+        <div class="user-card">
+          <div class="user-info">
+            <h3>{{ user.name }}</h3>
+            <p class="email">{{ user.email }}</p>
+            <span class="badge" [class.badge-admin]="user.role === 'admin'">
+              {{ user.role }}
+            </span>
+          </div>
+          <div class="user-actions">
+            <button class="btn btn-sm btn-secondary" (click)="openEditForm(user)">
+              {{ t.getTranslation('EDIT') }}
+            </button>
+            <button class="btn btn-sm btn-danger" (click)="deleteUser(user.id)">
+              {{ t.getTranslation('DELETE') }}
+            </button>
+          </div>
+        </div>
+      } @empty {
+        <p class="no-data">{{ t.getTranslation('NO_USERS') }}</p>
+      }
+    </div>
+  }
+
+  <!-- User Edit Form Modal -->
+  @if (showEditForm()) {
+    <div class="modal-overlay" (click)="showEditForm.set(false)">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <h3>{{ editingUser() ? t.getTranslation('EDIT_USER') : t.getTranslation('CREATE_USER') }}</h3>
+        
+        <form (ngSubmit)="saveUser()">
+          <div class="form-group">
+            <label>{{ t.getTranslation('EMAIL') }} *</label>
+            <input type="email" [(ngModel)]="editForm.email" name="email" class="form-control" required>
+          </div>
+
+          <div class="form-group">
+            <label>{{ t.getTranslation('NAME') }} *</label>
+            <input type="text" [(ngModel)]="editForm.name" name="name" class="form-control" required>
+          </div>
+
+          <div class="form-group">
+            <label>{{ t.getTranslation('ROLE') }} *</label>
+            <select [(ngModel)]="editForm.role" name="role" class="form-control" required>
+              <option value="user">User (len čítanie)</option>
+              <option value="technician">Technician</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>
+              {{ t.getTranslation('PASSWORD') }}
+              @if (editingUser()) {
+                ({{ t.getTranslation('LEAVE_EMPTY_NO_CHANGE') }})
+              } @else {
+                *
+              }
+            </label>
+            <input 
+              type="password" 
+              [(ngModel)]="editForm.password" 
+              name="password" 
+              class="form-control"
+              [required]="!editingUser()"
+              autocomplete="new-password">
+          </div>
+
+          <div class="form-actions">
+            <button type="button" class="btn btn-secondary" (click)="showEditForm.set(false)">
+              {{ t.getTranslation('CANCEL') }}
+            </button>
+            <button type="submit" class="btn btn-primary">
+              {{ t.getTranslation('SAVE') }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+</div>

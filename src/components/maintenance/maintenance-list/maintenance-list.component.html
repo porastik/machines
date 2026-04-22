@@ -3,12 +3,26 @@
 </div>
 
 <div class="bg-white p-6 rounded-lg shadow-md">
-  <div class="mb-4 border-b">
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-4 border-b pb-4">
     <nav class="flex space-x-4" aria-label="Tabs">
       <button (click)="setFilter('all')" [class.border-blue-500]="filterType() === 'all'" [class.text-blue-600]="filterType() === 'all'" class="px-3 py-2 font-medium text-sm rounded-t-md border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">{{ 'ALL' | translate }}</button>
       <button (click)="setFilter('scheduled')" [class.border-blue-500]="filterType() === 'scheduled'" [class.text-blue-600]="filterType() === 'scheduled'" class="px-3 py-2 font-medium text-sm rounded-t-md border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">{{ 'SCHEDULED' | translate }}</button>
       <button (click)="setFilter('emergency')" [class.border-blue-500]="filterType() === 'emergency'" [class.text-blue-600]="filterType() === 'emergency'" class="px-3 py-2 font-medium text-sm rounded-t-md border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">{{ 'EMERGENCY' | translate }}</button>
     </nav>
+    
+    <!-- Year filter -->
+    <div class="flex items-center gap-2">
+      <label class="text-sm text-gray-600 font-medium">{{ 'YEAR' | translate }}:</label>
+      <select 
+        [value]="filterYear()"
+        (change)="setYearFilter($any($event.target).value)"
+        class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        <option value="all">{{ 'ALL_YEARS' | translate }}</option>
+        @for (year of availableYears(); track year) {
+          <option [value]="year">{{ year }}</option>
+        }
+      </select>
+    </div>
   </div>
   
   <div class="overflow-x-auto">
@@ -17,11 +31,12 @@
         <thead>
           <tr class="text-xs text-gray-500 uppercase border-b">
             <th class="py-3 px-4">{{ 'DEVICE' | translate }}</th>
+            <th class="py-3 px-4">{{ 'DEVICE_TYPE' | translate }}</th>
             <th class="py-3 px-4">{{ 'TECHNICIAN' | translate }}</th>
             <th class="py-3 px-4">{{ 'DATE' | translate }}</th>
             <th class="py-3 px-4">{{ 'TYPE' | translate }}</th>
             <th class="py-3 px-4">{{ 'NOTES' | translate }}</th>
-            @if (authService.isAdmin()) {
+            @if (authService.canEdit()) {
               <th class="py-3 px-4 text-center">{{ 'ACTIONS' | translate }}</th>
             }
           </tr>
@@ -32,8 +47,12 @@
               <td class="py-3 px-4 font-medium text-gray-800">
                 <a [routerLink]="['/devices', log.deviceId]" class="text-blue-600 hover:underline">{{ log.deviceName }}</a>
               </td>
+              <td class="py-3 px-4 text-gray-600">{{ log.deviceType || '-' }}</td>
               <td class="py-3 px-4 text-gray-600">{{ log.technician }}</td>
-              <td class="py-3 px-4 text-gray-600">{{ log.date }}</td>
+              <td class="py-3 px-4 text-gray-600">
+                <div>{{ log.date | date:'dd.MM.yyyy' }}</div>
+                <div class="text-xs text-gray-500">{{ log.date | date:'HH:mm' }}</div>
+              </td>
               <td class="py-3 px-4">
                  @if (log.type === 'scheduled') {
                   <span class="px-2 py-1 text-xs font-semibold text-blue-800 bg-blue-100 rounded-full">{{ 'SCHEDULED' | translate }}</span>
@@ -42,15 +61,17 @@
                 }
               </td>
               <td class="py-3 px-4 text-gray-600 text-sm max-w-xs truncate">{{ log.notes }}</td>
-              @if (authService.isAdmin()) {
+              @if (authService.canEdit()) {
                 <td class="py-3 px-4 text-center">
-                  <button 
-                    (click)="deleteLog(log.id, log.deviceName)" 
-                    class="text-red-600 hover:text-red-800 font-medium text-sm"
-                    title="Vymazať záznam"
-                  >
-                    🗑️ {{ 'DELETE' | translate }}
-                  </button>
+                  @if (authService.isAdmin()) {
+                    <button 
+                      (click)="deleteLog(log.id, log.deviceName)" 
+                      class="text-red-600 hover:text-red-800 font-medium text-sm"
+                      title="Vymazať záznam"
+                    >
+                      🗑️ {{ 'DELETE' | translate }}
+                    </button>
+                  }
                 </td>
               }
             </tr>

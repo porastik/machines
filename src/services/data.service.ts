@@ -1,9 +1,10 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { Device, SparePart, MaintenanceLog } from '../models';
+import { Device, SparePart, MaintenanceLog, Supplier, PartPriceHistory } from '../models';
 import { Observable, of, delay, tap, catchError, map, from } from 'rxjs';
 import { ApiService } from '../core/services/api.service';
 import { SupabaseService } from '../core/services/supabase.service';
+import { NotificationService } from '../core/services/notification.service';
 import { environment } from '../environments/environment';
 
 const MOCK_DEVICES: Device[] = [
@@ -32,11 +33,17 @@ const MOCK_LOGS: MaintenanceLog[] = [
 export class DataService {
   private apiService = inject(ApiService);
   private supabaseService = inject(SupabaseService);
+  private notificationService = inject(NotificationService);
   private router = inject(Router);
   
   private devices = signal<Device[]>(MOCK_DEVICES);
   private parts = signal<SparePart[]>(MOCK_PARTS);
   private logs = signal<MaintenanceLog[]>(MOCK_LOGS);
+  private suppliers = signal<Supplier[]>([]);
+  private priceHistory = signal<PartPriceHistory[]>([]);
+  
+  // Flag to prevent multiple session expiry notifications
+  private sessionExpiredNotified = false;
 
   /**
    * Získať validný token alebo null ak je expirovaný
@@ -44,6 +51,7 @@ export class DataService {
   private getValidToken(): string | null {
     const token = localStorage.getItem('supabase.auth.token');
     if (!token) {
+      if (!environment.enableLogging) return null;
       console.warn('⚠️ No auth token found');
       return null;
     }
@@ -54,20 +62,28 @@ export class DataService {
       
       // Check if token is expired (with 1 minute buffer)
       if (expiresAt && expiresAt * 1000 < Date.now() + 60000) {
-        console.warn('⚠️ Token expired, clearing and redirecting to login');
+        if (environment.enableLogging) {
+          console.warn('⚠️ Token expired, clearing and redirecting to login');
+        }
         localStorage.removeItem('supabase.auth.token');
-        // Use setTimeout to avoid navigation during HTTP call
-        setTimeout(() => {
-          alert('Vaše prihlásenie vypršalo. Prosím prihláste sa znova.');
-          // Use Angular Router for proper navigation
-          this.router.navigate(['/login']);
-        }, 100);
+        
+        // Show notification only once per session
+        if (!this.sessionExpiredNotified) {
+          this.sessionExpiredNotified = true;
+          this.notificationService.warning('Vaše prihlásenie vypršalo. Prosím prihláste sa znova.');
+          // Use setTimeout to avoid navigation during HTTP call
+          setTimeout(() => {
+            this.router.navigate(['/login']);
+          }, 100);
+        }
         return null;
       }
       
       return tokenData.access_token;
     } catch (e) {
-      console.error('❌ Error parsing token:', e);
+      if (environment.enableLogging) {
+        console.error('❌ Error parsing token:', e);
+      }
       return null;
     }
   }
@@ -485,6 +501,93 @@ export class DataService {
   }
 
   /**
+   * Aktualizovať dátumy údržby zariadenia po vykonaní plánovanej údržby
+   */
+  updateDeviceMaintenance(deviceId: string, lastMaintenance: string, nextMaintenance: string): Observable<Device> {
+    const updateLocal = () => {
+      this.devices.update(devices => {
+        return devices.map(device => {
+          if (device.id === deviceId) {
+            return {
+              ...device,
+              lastMaintenance: lastMaintenance,
+              nextMaintenance: nextMaintenance,
+            };
+          }
+          return device;
+        });
+      });
+    };
+
+    if (environment.enableMockData) {
+      updateLocal();
+      const device = this.devices().find(d => d.id === deviceId);
+      return of(device!).pipe(delay(300));
+    }
+
+    console.log('🔄 Updating device maintenance dates via direct fetch...');
+    const token = localStorage.getItem('supabase.auth.token');
+    if (!token) {
+      console.warn('⚠️ No auth token found');
+      updateLocal();
+      const device = this.devices().find(d => d.id === deviceId);
+      return of(device!);
+    }
+
+    const tokenData = JSON.parse(token);
+
+    const updateData = {
+      last_maintenance: lastMaintenance,
+      next_maintenance: nextMaintenance,
+    };
+
+    console.log('📤 Sending maintenance update:', updateData);
+
+    return from(
+      fetch(`${environment.supabase.url}/rest/v1/devices?id=eq.${deviceId}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': environment.supabase.anonKey,
+          'Authorization': `Bearer ${tokenData.access_token}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify(updateData),
+      })
+      .then(res => {
+        console.log('📥 Maintenance update response status:', res.status);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+    ).pipe(
+      tap(data => console.log('✅ Maintenance update response:', data)),
+      map((data: any[]) => {
+        if (data && data.length > 0) {
+          return this.mapDeviceFromDb(data[0]);
+        }
+        const device = this.devices().find(d => d.id === deviceId);
+        return {
+          ...device!,
+          lastMaintenance: lastMaintenance,
+          nextMaintenance: nextMaintenance,
+        };
+      }),
+      tap(updatedDevice => {
+        console.log('📝 Updating local devices signal with maintenance data');
+        this.devices.update(devices =>
+          devices.map(d => d.id === deviceId ? updatedDevice : d)
+        );
+      }),
+      catchError(error => {
+        console.error('❌ Error updating device maintenance:', error);
+        updateLocal();
+        const device = this.devices().find(d => d.id === deviceId);
+        return of(device!);
+      })
+    );
+  }
+
+  /**
    * Vymazať zariadenie (vyradiť)
    */
   deleteDevice(deviceId: string): Observable<void> {
@@ -781,7 +884,7 @@ export class DataService {
       name: dbPart.name,
       sku: dbPart.sku,
       quantity: dbPart.quantity,
-      minQuantity: dbPart.min_quantity || 10,
+      minQuantity: dbPart.min_quantity !== undefined ? dbPart.min_quantity : 0,
       location: dbPart.location,
       deviceId: dbPart.device_id || undefined,
       deviceName: dbPart.devices?.name || dbPart.device_name || undefined,
@@ -870,7 +973,6 @@ export class DataService {
           },
           body: JSON.stringify({
             part_id: partId,
-            part_name: currentPart.name,
             quantity_before: quantityBefore,
             quantity_after: newQuantity,
             change_type: changeType,
@@ -880,15 +982,34 @@ export class DataService {
         })
         .then(res => {
           if (res.ok) {
-            console.log('✅ History record created');
+            if (environment.enableLogging) console.log('✅ History record created');
           } else {
-            console.warn('⚠️ Failed to create history record');
+            if (environment.enableLogging) console.warn('⚠️ Failed to create history record');
           }
         })
-        .catch(err => console.warn('⚠️ History save error:', err));
+        .catch(err => {
+          if (environment.enableLogging) console.warn('⚠️ History save error:', err);
+        });
       }),
       catchError(error => {
-        console.error('❌ Error updating part quantity:', error);
+        if (environment.enableLogging) {
+          console.error('❌ Error updating part quantity:', error);
+        }
+        
+        // Ak je to 401 (Unauthorized), pravdepodobne expiroval token
+        if (error.message && error.message.includes('401')) {
+          // Show notification only once
+          if (!this.sessionExpiredNotified) {
+            this.sessionExpiredNotified = true;
+            this.notificationService.warning('Vaša relácia vypršala. Prosím, prihláste sa znova.');
+            // Vymazať staré tokeny
+            localStorage.removeItem('supabase.auth.token');
+            localStorage.removeItem('currentUser');
+            // Presmerovať na login
+            setTimeout(() => this.router.navigate(['/login']), 100);
+          }
+        }
+        
         throw error;
       })
     );
@@ -956,10 +1077,9 @@ export class DataService {
           name: part.name,
           sku: part.sku,
           quantity: part.quantity,
-          min_quantity: part.minQuantity || 10,
+          min_quantity: part.minQuantity !== undefined ? part.minQuantity : 0,
           location: part.location,
           device_id: part.deviceId || null,
-          device_name: part.deviceName || null,
         }),
       })
       .then(async res => {
@@ -1025,7 +1145,7 @@ export class DataService {
     const tokenData = JSON.parse(token);
     
     return from(
-      fetch(`${environment.supabase.url}/rest/v1/maintenance_logs?order=created_at.desc`, {
+      fetch(`${environment.supabase.url}/rest/v1/maintenance_logs?select=*,devices(type)&order=created_at.desc`, {
         headers: {
           'apikey': environment.supabase.anonKey,
           'Authorization': `Bearer ${tokenData.access_token}`,
@@ -1051,6 +1171,7 @@ export class DataService {
       id: dbLog.id,
       deviceId: dbLog.device_id,
       deviceName: dbLog.device_name,
+      deviceType: dbLog.devices?.type,
       date: dbLog.date,
       technician: dbLog.technician,
       notes: dbLog.notes,
@@ -1080,10 +1201,26 @@ export class DataService {
       return of(newLog).pipe(delay(500));
     }
 
+    console.log('📡 Adding maintenance log to Supabase...');
+    const token = localStorage.getItem('supabase.auth.token');
+    if (!token) {
+      console.warn('⚠️ No auth token found for adding log');
+      const newLog = createLocal();
+      return of(newLog).pipe(delay(100));
+    }
+
+    const tokenData = JSON.parse(token);
+    
     return from(
-      this.supabaseService.db
-        .from('maintenance_logs')
-        .insert({
+      fetch(`${environment.supabase.url}/rest/v1/maintenance_logs`, {
+        method: 'POST',
+        headers: {
+          'apikey': environment.supabase.anonKey,
+          'Authorization': `Bearer ${tokenData.access_token}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify({
           device_id: log.deviceId,
           device_name: log.deviceName,
           date: log.date,
@@ -1091,29 +1228,49 @@ export class DataService {
           notes: log.notes,
           type: log.type,
           duration_minutes: log.durationMinutes,
-        } as any)
-        .select()
-        .single()
+        })
+      })
+      .then(async res => {
+        console.log('📥 Add maintenance log response status:', res.status);
+        const responseText = await res.text();
+        console.log('📥 Response body:', responseText);
+        
+        if (!res.ok) {
+          console.error('❌ Server error response:', responseText);
+          throw new Error(`HTTP ${res.status}: ${responseText}`);
+        }
+        
+        return responseText ? JSON.parse(responseText) : null;
+      })
     ).pipe(
-      map(({ data, error }) => {
-        if (error) throw error;
-        return this.mapLogFromDb(data);
+      tap(data => console.log('✅ Maintenance log added:', data)),
+      map((data: any[]) => {
+        if (data && data.length > 0) {
+          return this.mapLogFromDb(data[0]);
+        }
+        throw new Error('No data returned');
       }),
       tap(newLog => {
+        console.log('📝 Updating local logs signal');
         this.logs.update(logs => [newLog, ...logs]);
         
         // Aktualizovať last_maintenance dátum v zariadení
-        from(
-          this.supabaseService.db
-            .from('devices')
-            // @ts-ignore - Supabase type issue
-            .update({ last_maintenance: new Date().toISOString().split('T')[0] })
-            .eq('id', log.deviceId)
-        ).subscribe();
-
-        this.devices.update(devices => 
-          devices.map(d => d.id === log.deviceId ? {...d, lastMaintenance: new Date().toISOString().split('T')[0]} : d)
-        );
+        fetch(`${environment.supabase.url}/rest/v1/devices?id=eq.${log.deviceId}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': environment.supabase.anonKey,
+            'Authorization': `Bearer ${tokenData.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            last_maintenance: new Date().toISOString().split('T')[0]
+          })
+        }).then(() => {
+          console.log('✅ Device last_maintenance updated');
+          this.devices.update(devices => 
+            devices.map(d => d.id === log.deviceId ? {...d, lastMaintenance: new Date().toISOString().split('T')[0]} : d)
+          );
+        }).catch(err => console.error('❌ Error updating device last_maintenance:', err));
       }),
       catchError(error => {
         console.error('Error adding maintenance log:', error);
@@ -1169,5 +1326,395 @@ export class DataService {
       })
     );
   }
+
+  // ========== SUPPLIERS ==========
+
+  /**
+   * Získať signal s dodávateľmi
+   */
+  getSuppliersSignal() {
+    return this.suppliers.asReadonly();
+  }
+
+  /**
+   * Načítať dodávateľov z databázy
+   */
+  loadSuppliers(): Observable<Supplier[]> {
+    console.log('🔍 DataService.loadSuppliers() called');
+
+    if (environment.enableMockData) {
+      const mockSuppliers: Supplier[] = [
+        {
+          id: 'sup-001',
+          name: 'Industrial Parts Ltd.',
+          contactPerson: 'John Smith',
+          email: 'john@industrialparts.com',
+          phone: '+421 123 456 789',
+          address: 'Priemyselná 1, Bratislava',
+          website: 'www.industrialparts.com',
+          notes: 'Hlavný dodávateľ priemyselných komponentov',
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        },
+        {
+          id: 'sup-002',
+          name: 'Tech Components SK',
+          contactPerson: 'Maria Novak',
+          email: 'maria@techcomponents.sk',
+          phone: '+421 987 654 321',
+          address: 'Technická 15, Košice',
+          website: 'www.techcomponents.sk',
+          notes: 'Špecialista na elektronické súčiastky',
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      ];
+      return of(mockSuppliers).pipe(
+        delay(300),
+        tap(suppliers => this.suppliers.set(suppliers))
+      );
+    }
+
+    const token = this.getValidToken();
+    if (!token) {
+      console.warn('⚠️ No valid auth token');
+      return of([]);
+    }
+
+    const tokenData = JSON.parse(localStorage.getItem('supabase.auth.token')!);
+
+    return from(
+      fetch(`${environment.supabase.url}/rest/v1/suppliers?order=name.asc`, {
+        method: 'GET',
+        headers: {
+          'apikey': environment.supabase.anonKey,
+          'Authorization': `Bearer ${tokenData.access_token}`,
+          'Content-Type': 'application/json',
+        }
+      })
+      .then(res => res.ok ? res.json() : Promise.reject(res))
+    ).pipe(
+      map((data: any[]) => {
+        return data.map(s => this.mapSupplierFromDb(s));
+      }),
+      tap(suppliers => {
+        console.log('✅ Suppliers loaded:', suppliers.length);
+        this.suppliers.set(suppliers);
+      }),
+      catchError(error => {
+        console.error('❌ Error loading suppliers:', error);
+        return of([]);
+      })
+    );
+  }
+
+  /**
+   * Mapovať dodávateľa z databázy
+   */
+  private mapSupplierFromDb(dbSupplier: any): Supplier {
+    return {
+      id: dbSupplier.id,
+      name: dbSupplier.name,
+      contactPerson: dbSupplier.contact_person,
+      email: dbSupplier.email,
+      phone: dbSupplier.phone,
+      address: dbSupplier.address,
+      website: dbSupplier.website,
+      notes: dbSupplier.notes,
+      isActive: dbSupplier.is_active,
+      createdAt: dbSupplier.created_at,
+      updatedAt: dbSupplier.updated_at
+    };
+  }
+
+  /**
+   * Vytvoriť nového dodávateľa
+   */
+  createSupplier(supplier: Omit<Supplier, 'id' | 'createdAt' | 'updatedAt'>): Observable<Supplier> {
+    console.log('➕ DataService.createSupplier() called');
+
+    if (environment.enableMockData) {
+      const newSupplier: Supplier = {
+        ...supplier,
+        id: `sup-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      this.suppliers.update(s => [...s, newSupplier]);
+      return of(newSupplier).pipe(delay(300));
+    }
+
+    const token = this.getValidToken();
+    if (!token) {
+      throw new Error('No valid auth token');
+    }
+
+    const tokenData = JSON.parse(localStorage.getItem('supabase.auth.token')!);
+
+    const dbSupplier = {
+      name: supplier.name,
+      contact_person: supplier.contactPerson,
+      email: supplier.email,
+      phone: supplier.phone,
+      address: supplier.address,
+      website: supplier.website,
+      notes: supplier.notes,
+      is_active: supplier.isActive
+    };
+
+    return from(
+      fetch(`${environment.supabase.url}/rest/v1/suppliers`, {
+        method: 'POST',
+        headers: {
+          'apikey': environment.supabase.anonKey,
+          'Authorization': `Bearer ${tokenData.access_token}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify(dbSupplier)
+      })
+      .then(res => res.ok ? res.json() : Promise.reject(res))
+    ).pipe(
+      map((data: any[]) => this.mapSupplierFromDb(data[0])),
+      tap(newSupplier => {
+        this.suppliers.update(s => [...s, newSupplier]);
+      })
+    );
+  }
+
+  /**
+   * Aktualizovať dodávateľa
+   */
+  updateSupplier(supplierId: string, updates: Partial<Supplier>): Observable<Supplier> {
+    console.log('✏️ DataService.updateSupplier() called');
+
+    if (environment.enableMockData) {
+      this.suppliers.update(suppliers =>
+        suppliers.map(s => s.id === supplierId 
+          ? { ...s, ...updates, updatedAt: new Date().toISOString() }
+          : s
+        )
+      );
+      const updated = this.suppliers().find(s => s.id === supplierId)!;
+      return of(updated).pipe(delay(300));
+    }
+
+    const token = this.getValidToken();
+    if (!token) {
+      throw new Error('No valid auth token');
+    }
+
+    const tokenData = JSON.parse(localStorage.getItem('supabase.auth.token')!);
+
+    const dbUpdates: any = {};
+    if (updates.name !== undefined) dbUpdates.name = updates.name;
+    if (updates.contactPerson !== undefined) dbUpdates.contact_person = updates.contactPerson;
+    if (updates.email !== undefined) dbUpdates.email = updates.email;
+    if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+    if (updates.address !== undefined) dbUpdates.address = updates.address;
+    if (updates.website !== undefined) dbUpdates.website = updates.website;
+    if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+    if (updates.isActive !== undefined) dbUpdates.is_active = updates.isActive;
+
+    return from(
+      fetch(`${environment.supabase.url}/rest/v1/suppliers?id=eq.${supplierId}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': environment.supabase.anonKey,
+          'Authorization': `Bearer ${tokenData.access_token}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify(dbUpdates)
+      })
+      .then(res => res.ok ? res.json() : Promise.reject(res))
+    ).pipe(
+      map((data: any[]) => this.mapSupplierFromDb(data[0])),
+      tap(updated => {
+        this.suppliers.update(suppliers =>
+          suppliers.map(s => s.id === supplierId ? updated : s)
+        );
+      })
+    );
+  }
+
+  /**
+   * Vymazať dodávateľa
+   */
+  deleteSupplier(supplierId: string): Observable<void> {
+    console.log('🗑️ DataService.deleteSupplier() called');
+
+    if (environment.enableMockData) {
+      this.suppliers.update(s => s.filter(supplier => supplier.id !== supplierId));
+      return of(void 0).pipe(delay(300));
+    }
+
+    const token = this.getValidToken();
+    if (!token) {
+      throw new Error('No valid auth token');
+    }
+
+    const tokenData = JSON.parse(localStorage.getItem('supabase.auth.token')!);
+
+    return from(
+      fetch(`${environment.supabase.url}/rest/v1/suppliers?id=eq.${supplierId}`, {
+        method: 'DELETE',
+        headers: {
+          'apikey': environment.supabase.anonKey,
+          'Authorization': `Bearer ${tokenData.access_token}`,
+          'Content-Type': 'application/json',
+        }
+      })
+      .then(res => res.ok ? undefined : Promise.reject(res))
+    ).pipe(
+      tap(() => {
+        this.suppliers.update(s => s.filter(supplier => supplier.id !== supplierId));
+      }),
+      map(() => void 0)
+    );
+  }
+
+  // ========== PART PRICE HISTORY ==========
+
+  /**
+   * Získať históriu cien pre diel
+   */
+  getPartPriceHistory(partId: string): Observable<PartPriceHistory[]> {
+    console.log('📊 DataService.getPartPriceHistory() called for:', partId);
+
+    if (environment.enableMockData) {
+      const mockHistory: PartPriceHistory[] = [
+        {
+          id: 'ph-001',
+          partId: partId,
+          partName: 'Spindle Bearing',
+          partSku: 'BRG-5021',
+          price: 150.00,
+          currency: 'EUR',
+          supplierId: 'sup-001',
+          supplierName: 'Industrial Parts Ltd.',
+          effectiveDate: '2024-01-01',
+          notes: 'Počiatočná cena',
+          changedBy: 'admin@example.com',
+          createdAt: new Date('2024-01-01').toISOString()
+        },
+        {
+          id: 'ph-002',
+          partId: partId,
+          partName: 'Spindle Bearing',
+          partSku: 'BRG-5021',
+          price: 165.00,
+          currency: 'EUR',
+          supplierId: 'sup-001',
+          supplierName: 'Industrial Parts Ltd.',
+          effectiveDate: '2024-06-15',
+          notes: 'Zvýšenie ceny od dodávateľa',
+          changedBy: 'admin@example.com',
+          createdAt: new Date('2024-06-15').toISOString()
+        }
+      ];
+      return of(mockHistory).pipe(delay(300));
+    }
+
+    const token = this.getValidToken();
+    if (!token) {
+      return of([]);
+    }
+
+    const tokenData = JSON.parse(localStorage.getItem('supabase.auth.token')!);
+
+    return from(
+      fetch(`${environment.supabase.url}/rest/v1/part_price_history?part_id=eq.${partId}&order=effective_date.desc`, {
+        method: 'GET',
+        headers: {
+          'apikey': environment.supabase.anonKey,
+          'Authorization': `Bearer ${tokenData.access_token}`,
+          'Content-Type': 'application/json',
+        }
+      })
+      .then(res => res.ok ? res.json() : Promise.reject(res))
+    ).pipe(
+      map((data: any[]) => {
+        return data.map(h => this.mapPriceHistoryFromDb(h));
+      }),
+      catchError(error => {
+        console.error('❌ Error loading price history:', error);
+        return of([]);
+      })
+    );
+  }
+
+  /**
+   * Mapovať históriu cien z databázy
+   */
+  private mapPriceHistoryFromDb(dbHistory: any): PartPriceHistory {
+    return {
+      id: dbHistory.id,
+      partId: dbHistory.part_id,
+      partName: '', // Bude doplnené z joinu alebo samostatným volaním
+      partSku: '',
+      price: parseFloat(dbHistory.price),
+      currency: dbHistory.currency,
+      supplierId: dbHistory.supplier_id,
+      supplierName: '', // Bude doplnené z joinu
+      effectiveDate: dbHistory.effective_date,
+      notes: dbHistory.notes,
+      changedBy: dbHistory.changed_by,
+      createdAt: dbHistory.created_at
+    };
+  }
+
+  /**
+   * Pridať záznam do histórie cien
+   */
+  addPriceHistory(history: Omit<PartPriceHistory, 'id' | 'createdAt'>): Observable<PartPriceHistory> {
+    console.log('➕ DataService.addPriceHistory() called');
+
+    if (environment.enableMockData) {
+      const newHistory: PartPriceHistory = {
+        ...history,
+        id: `ph-${Date.now()}`,
+        createdAt: new Date().toISOString()
+      };
+      return of(newHistory).pipe(delay(300));
+    }
+
+    const token = this.getValidToken();
+    if (!token) {
+      throw new Error('No valid auth token');
+    }
+
+    const tokenData = JSON.parse(localStorage.getItem('supabase.auth.token')!);
+
+    const dbHistory = {
+      part_id: history.partId,
+      price: history.price,
+      currency: history.currency,
+      supplier_id: history.supplierId,
+      effective_date: history.effectiveDate,
+      notes: history.notes,
+      changed_by: history.changedBy
+    };
+
+    return from(
+      fetch(`${environment.supabase.url}/rest/v1/part_price_history`, {
+        method: 'POST',
+        headers: {
+          'apikey': environment.supabase.anonKey,
+          'Authorization': `Bearer ${tokenData.access_token}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify(dbHistory)
+      })
+      .then(res => res.ok ? res.json() : Promise.reject(res))
+    ).pipe(
+      map((data: any[]) => this.mapPriceHistoryFromDb(data[0]))
+    );
+  }
 }
+
+
 

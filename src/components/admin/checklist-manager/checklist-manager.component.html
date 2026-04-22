@@ -1,0 +1,186 @@
+<div class="checklist-manager">
+  <div class="header">
+    <h2>{{ t.getTranslation('MANAGE_CHECKLISTS') }}</h2>
+    <button class="btn btn-primary" (click)="openNewChecklistForm()">
+      {{ t.getTranslation('CREATE_CHECKLIST') }}
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="loading">{{ t.getTranslation('LOADING') }}</div>
+  } @else {
+    <div class="checklist-list">
+      @for (checklist of checklists(); track checklist.id) {
+        <div class="checklist-card">
+          <div class="checklist-header">
+            <div class="checklist-info">
+              <h3>{{ checklist.name }}</h3>
+              <div class="meta">
+                <span class="device-type">{{ checklist.device_type }}</span>
+                <span class="custom-id">{{ checklist.custom_id }}</span>
+                @if (checklist.is_active === false) {
+                  <span class="inactive-badge">{{ t.getTranslation('INACTIVE') }}</span>
+                }
+              </div>
+              @if (checklist.description) {
+                <p class="description">{{ checklist.description }}</p>
+              }
+            </div>
+            <div class="actions">
+              <button class="btn btn-sm btn-secondary" (click)="openItemsManager(checklist)">
+                {{ t.getTranslation('MANAGE_ITEMS') }} ({{ checklist.items?.length || 0 }})
+              </button>
+              <button class="btn btn-sm btn-info" (click)="openEditChecklistForm(checklist)">
+                {{ t.getTranslation('EDIT') }}
+              </button>
+              <button class="btn btn-sm btn-danger" (click)="deleteChecklist(checklist.id)">
+                {{ t.getTranslation('DELETE') }}
+              </button>
+            </div>
+          </div>
+
+          @if (selectedChecklistId() === checklist.id && checklist.items) {
+            <div class="items-section">
+              <div class="items-header">
+                <h4>{{ t.getTranslation('CHECKLIST_ITEMS') }}</h4>
+                <button class="btn btn-sm btn-primary" (click)="openNewItemForm(checklist.id)">
+                  {{ t.getTranslation('ADD_ITEM') }}
+                </button>
+              </div>
+              
+              @if (checklist.items.length === 0) {
+                <p class="no-items">{{ t.getTranslation('NO_ITEMS') }}</p>
+              } @else {
+                <div class="items-list">
+                  @for (item of checklist.items; track item.id) {
+                    <div class="item-card">
+                      <div class="item-order">{{ item.order_index }}</div>
+                      <div class="item-content">
+                        <div class="item-description">{{ item.task_description }}</div>
+                        <div class="item-meta">
+                          <span [class.mandatory]="item.is_mandatory" [class.optional]="!item.is_mandatory">
+                            {{ item.is_mandatory ? t.getTranslation('MANDATORY') : t.getTranslation('OPTIONAL') }}
+                          </span>
+                          @if (item.estimated_minutes) {
+                            <span class="time">⏱ {{ item.estimated_minutes }} min</span>
+                          }
+                          @if (item.safety_note) {
+                            <span class="safety">⚠️ {{ item.safety_note }}</span>
+                          }
+                        </div>
+                      </div>
+                      <div class="item-actions">
+                        <button class="btn btn-xs btn-info" (click)="openEditItemForm(item)">
+                          {{ t.getTranslation('EDIT') }}
+                        </button>
+                        <button class="btn btn-xs btn-danger" (click)="deleteItem(item.id, checklist.id)">
+                          {{ t.getTranslation('DELETE') }}
+                        </button>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+              
+              <button class="btn btn-sm btn-secondary" (click)="closeItemsManager()">
+                {{ t.getTranslation('CLOSE') }}
+              </button>
+            </div>
+          }
+        </div>
+      } @empty {
+        <p class="no-data">{{ t.getTranslation('NO_CHECKLISTS') }}</p>
+      }
+    </div>
+  }
+
+  <!-- Checklist Edit Form Modal -->
+  @if (showEditForm()) {
+    <div class="modal-overlay" (click)="showEditForm.set(false)">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <h3>{{ editingChecklist() ? t.getTranslation('EDIT_CHECKLIST') : t.getTranslation('CREATE_CHECKLIST') }}</h3>
+        
+        <form (ngSubmit)="saveChecklist()">
+          <div class="form-group">
+            <label>{{ t.getTranslation('DEVICE_TYPE') }} *</label>
+            <input type="text" [(ngModel)]="editForm.deviceType" name="deviceType" class="form-control" required>
+            <small>{{ t.getTranslation('DEVICE_TYPE_HINT') }}</small>
+          </div>
+
+          <div class="form-group">
+            <label>{{ t.getTranslation('NAME') }} *</label>
+            <input type="text" [(ngModel)]="editForm.name" name="name" class="form-control" required>
+          </div>
+
+          <div class="form-group">
+            <label>{{ t.getTranslation('DESCRIPTION') }}</label>
+            <textarea [(ngModel)]="editForm.description" name="description" class="form-control" rows="3"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>
+              <input type="checkbox" [(ngModel)]="editForm.isActive" name="isActive">
+              {{ t.getTranslation('ACTIVE') }}
+            </label>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" (click)="showEditForm.set(false)">
+              {{ t.getTranslation('CANCEL') }}
+            </button>
+            <button type="submit" class="btn btn-primary">
+              {{ t.getTranslation('SAVE') }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  <!-- Item Edit Form Modal -->
+  @if (showItemForm()) {
+    <div class="modal-overlay" (click)="showItemForm.set(false)">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <h3>{{ editingItem() ? t.getTranslation('EDIT_ITEM') : t.getTranslation('ADD_ITEM') }}</h3>
+        
+        <form (ngSubmit)="saveItem()">
+          <div class="form-group">
+            <label>{{ t.getTranslation('ORDER') }} *</label>
+            <input type="number" [(ngModel)]="itemForm.orderIndex" name="orderIndex" class="form-control" required min="1">
+          </div>
+
+          <div class="form-group">
+            <label>{{ t.getTranslation('TASK_DESCRIPTION') }} *</label>
+            <textarea [(ngModel)]="itemForm.taskDescription" name="taskDescription" class="form-control" rows="3" required></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>
+              <input type="checkbox" [(ngModel)]="itemForm.isMandatory" name="isMandatory">
+              {{ t.getTranslation('MANDATORY') }}
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label>{{ t.getTranslation('ESTIMATED_MINUTES') }}</label>
+            <input type="number" [(ngModel)]="itemForm.estimatedMinutes" name="estimatedMinutes" class="form-control" min="0">
+          </div>
+
+          <div class="form-group">
+            <label>{{ t.getTranslation('SAFETY_NOTE') }}</label>
+            <textarea [(ngModel)]="itemForm.safetyNote" name="safetyNote" class="form-control" rows="2"></textarea>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" (click)="showItemForm.set(false)">
+              {{ t.getTranslation('CANCEL') }}
+            </button>
+            <button type="submit" class="btn btn-primary">
+              {{ t.getTranslation('SAVE') }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+</div>

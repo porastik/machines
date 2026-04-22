@@ -7,13 +7,15 @@
       </svg>
       {{ 'EXPORT_DEVICES' | translate }}
     </button>
-    <button (click)="toggleAddForm()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
-      {{ showAddForm() ? 'CANCEL' : 'ADD_NEW_DEVICE' | translate }}
-    </button>
+    @if (authService.canEdit()) {
+      <button (click)="toggleAddForm()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+        {{ showAddForm() ? 'CANCEL' : 'ADD_NEW_DEVICE' | translate }}
+      </button>
+    }
   </div>
 </div>
 
-@if (showAddForm()) {
+@if (showAddForm() && authService.canEdit()) {
   <div class="bg-white p-6 rounded-lg shadow-md mb-6">
     <h2 class="text-xl font-semibold mb-4">Pridať nové zariadenie</h2>
     <form (submit)="addDevice($event)">
@@ -145,6 +147,7 @@
             <th class="py-3 px-4">{{ 'LOCATION' | translate }}</th>
             <th class="py-3 px-4">{{ 'STATUS' | translate }}</th>
             <th class="py-3 px-4">{{ 'DOWNTIME' | translate }}</th>
+            <th class="py-3 px-4">{{ 'MAINTENANCE_PERIOD' | translate }}</th>
             <th class="py-3 px-4">{{ 'NEXT_MAINTENANCE' | translate }}</th>
             <th class="py-3 px-4"></th>
           </tr>
@@ -161,6 +164,13 @@
                 </span>
               </td>
               <td class="py-3 px-4 text-gray-600">{{ device.downtime }}</td>
+              <td class="py-3 px-4">
+                @if (device.maintenancePeriod) {
+                  <span class="text-sm text-gray-600">{{ (device.maintenancePeriod.toUpperCase()) | translate }}</span>
+                } @else {
+                  <span class="text-xs text-gray-400 italic">{{ 'NOT_SET' | translate }}</span>
+                }
+              </td>
               <td class="py-3 px-4 text-gray-600">{{ device.nextMaintenance }}</td>
               <td class="py-3 px-4 text-right">
                 <a [routerLink]="['/devices', device.id]" class="text-blue-600 hover:underline">{{ 'DETAILS' | translate }}</a>

@@ -1,0 +1,192 @@
+<div class="p-6">
+  <h1 class="text-3xl font-semibold text-gray-800 mb-6">💾 {{ 'BACKUP_RESTORE' | translate }}</h1>
+
+  <!-- Message -->
+  @if (message()) {
+    <div 
+      class="mb-6 p-4 rounded-lg"
+      [class.bg-green-100]="message()!.type === 'success'"
+      [class.text-green-700]="message()!.type === 'success'"
+      [class.bg-red-100]="message()!.type === 'error'"
+      [class.text-red-700]="message()!.type === 'error'"
+      [class.bg-blue-100]="message()!.type === 'info'"
+      [class.text-blue-700]="message()!.type === 'info'">
+      {{ message()!.text }}
+    </div>
+  }
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Export Section -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+      <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+        📤 {{ 'EXPORT_BACKUP' | translate }}
+      </h2>
+      
+      <p class="text-gray-600 mb-4">
+        {{ 'EXPORT_BACKUP_DESC' | translate }}
+      </p>
+
+      <ul class="text-sm text-gray-500 mb-6 space-y-1">
+        <li>✓ {{ 'DEVICES' | translate }}</li>
+        <li>✓ {{ 'SPARE_PARTS' | translate }}</li>
+        <li>✓ {{ 'MAINTENANCE' | translate }} {{ 'LOGS' | translate }}</li>
+        <li>✓ {{ 'SUPPLIERS' | translate }}</li>
+      </ul>
+
+      <button 
+        (click)="exportBackup()"
+        [disabled]="isLoading()"
+        class="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors flex items-center justify-center gap-2">
+        @if (isLoading()) {
+          <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          {{ 'CREATING_BACKUP' | translate }}...
+        } @else {
+          📥 {{ 'DOWNLOAD_BACKUP' | translate }}
+        }
+      </button>
+
+      @if (lastBackupInfo()) {
+        <div class="mt-4 p-3 bg-gray-50 rounded-lg text-sm">
+          <p class="text-gray-600">{{ 'LAST_BACKUP' | translate }}: {{ lastBackupInfo()!.date }}</p>
+          <p class="text-gray-500">{{ 'SIZE' | translate }}: {{ lastBackupInfo()!.size }}</p>
+        </div>
+      }
+    </div>
+
+    <!-- Import Section -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+      <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+        📥 {{ 'IMPORT_BACKUP' | translate }}
+      </h2>
+      
+      <p class="text-gray-600 mb-4">
+        {{ 'IMPORT_BACKUP_DESC' | translate }}
+      </p>
+
+      <!-- File Input -->
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-2">{{ 'SELECT_FILE' | translate }}</label>
+        <input 
+          type="file" 
+          accept=".json"
+          (change)="onFileSelected($event)"
+          class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
+      </div>
+
+      <!-- Import Preview -->
+      @if (importPreview()) {
+        <div class="mb-4 p-4 bg-gray-50 rounded-lg">
+          <h3 class="font-medium text-gray-700 mb-2">{{ 'IMPORT_PREVIEW' | translate }}:</h3>
+          <ul class="text-sm text-gray-600 space-y-1">
+            <li>📱 {{ 'DEVICES' | translate }}: {{ importPreview()!.devices }}</li>
+            <li>🔧 {{ 'SPARE_PARTS' | translate }}: {{ importPreview()!.spareParts }}</li>
+            <li>📋 {{ 'MAINTENANCE' | translate }}: {{ importPreview()!.maintenanceLogs }}</li>
+            <li>🏭 {{ 'SUPPLIERS' | translate }}: {{ importPreview()!.suppliers }}</li>
+          </ul>
+        </div>
+
+        <!-- Import Options -->
+        <div class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <h3 class="font-medium text-gray-700 mb-3">{{ 'IMPORT_OPTIONS' | translate }}:</h3>
+          
+          <div class="space-y-2">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input 
+                type="checkbox" 
+                [checked]="importOptions().devices"
+                (change)="updateImportOption('devices', $any($event.target).checked)"
+                class="rounded text-blue-600">
+              <span class="text-sm text-gray-700">{{ 'IMPORT_DEVICES' | translate }}</span>
+            </label>
+            
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input 
+                type="checkbox" 
+                [checked]="importOptions().spareParts"
+                (change)="updateImportOption('spareParts', $any($event.target).checked)"
+                class="rounded text-blue-600">
+              <span class="text-sm text-gray-700">{{ 'IMPORT_SPARE_PARTS' | translate }}</span>
+            </label>
+            
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input 
+                type="checkbox" 
+                [checked]="importOptions().maintenanceLogs"
+                (change)="updateImportOption('maintenanceLogs', $any($event.target).checked)"
+                class="rounded text-blue-600">
+              <span class="text-sm text-gray-700">{{ 'IMPORT_MAINTENANCE_LOGS' | translate }}</span>
+            </label>
+            
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input 
+                type="checkbox" 
+                [checked]="importOptions().suppliers"
+                (change)="updateImportOption('suppliers', $any($event.target).checked)"
+                class="rounded text-blue-600">
+              <span class="text-sm text-gray-700">{{ 'IMPORT_SUPPLIERS' | translate }}</span>
+            </label>
+          </div>
+
+          <hr class="my-3 border-yellow-300">
+          
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input 
+              type="checkbox" 
+              [checked]="importOptions().replaceExisting"
+              (change)="updateImportOption('replaceExisting', $any($event.target).checked)"
+              class="rounded text-red-600">
+            <span class="text-sm text-red-700 font-medium">{{ 'REPLACE_EXISTING_DATA' | translate }}</span>
+          </label>
+          <p class="text-xs text-gray-500 mt-1 ml-6">{{ 'REPLACE_EXISTING_DESC' | translate }}</p>
+        </div>
+
+        <div class="flex gap-2">
+          <button 
+            (click)="restoreBackup()"
+            [disabled]="isLoading()"
+            class="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-colors flex items-center justify-center gap-2">
+            @if (isLoading()) {
+              <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              {{ 'RESTORING' | translate }}...
+            } @else {
+              🔄 {{ 'RESTORE_DATA' | translate }}
+            }
+          </button>
+          
+          <button 
+            (click)="clearSelectedFile()"
+            class="px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+            ✕
+          </button>
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- Warning Box -->
+  <div class="mt-6 bg-orange-50 border border-orange-200 rounded-lg p-4">
+    <div class="flex">
+      <div class="flex-shrink-0">
+        <svg class="h-5 w-5 text-orange-400" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+        </svg>
+      </div>
+      <div class="ml-3">
+        <h3 class="text-sm font-medium text-orange-800">{{ 'BACKUP_WARNING_TITLE' | translate }}</h3>
+        <div class="mt-2 text-sm text-orange-700">
+          <ul class="list-disc list-inside space-y-1">
+            <li>{{ 'BACKUP_WARNING_1' | translate }}</li>
+            <li>{{ 'BACKUP_WARNING_2' | translate }}</li>
+            <li>{{ 'BACKUP_WARNING_3' | translate }}</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

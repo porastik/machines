@@ -1,22 +1,191 @@
-<div class="flex justify-between items-center mb-6">
-  <h1 class="text-3xl font-semibold text-gray-800">⏱️ {{ 'DOWNTIME_TRACKING' | translate }}</h1>
-  
-  <!-- Month Selector -->
-  <div class="flex items-center gap-3">
-    <label for="monthSelect" class="text-sm font-medium text-gray-700">{{ 'MONTH' | translate }}:</label>
-    <select 
-      id="monthSelect"
-      class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-      [value]="selectedYear() + '-' + selectedMonth()"
-      (change)="onMonthChange($any($event.target).value)">
-      @for (month of availableMonths(); track month.value) {
-        <option [value]="month.value">{{ month.label }}</option>
+<div class="mb-6">
+  <div class="flex justify-between items-center mb-4">
+    <h1 class="text-3xl font-semibold text-gray-800">⏱️ {{ 'DOWNTIME_TRACKING' | translate }}</h1>
+    
+    <div class="flex items-center gap-3">
+      <!-- Export Button -->
+      <button 
+        (click)="exportToExcel()"
+        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center gap-2">
+        📊 {{ 'EXPORT_EXCEL' | translate }}
+      </button>
+      
+      <!-- View Mode Selector -->
+      <div class="flex gap-2">
+        <button 
+          (click)="toggleViewMode('monthly')"
+          [class]="viewMode() === 'monthly' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
+          class="px-4 py-2 rounded-md text-sm font-medium transition-colors hover:opacity-80">
+          📅 {{ 'MONTHLY' | translate }}
+        </button>
+        <button 
+          (click)="toggleViewMode('yearly')"
+          [class]="viewMode() === 'yearly' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
+          class="px-4 py-2 rounded-md text-sm font-medium transition-colors hover:opacity-80">
+          📆 {{ 'YEARLY' | translate }}
+        </button>
+      </div>
+      
+      <!-- Month Selector (only for monthly view) -->
+      @if (viewMode() === 'monthly') {
+        <label for="monthSelect" class="text-sm font-medium text-gray-700">{{ 'MONTH' | translate }}:</label>
+        <select 
+          id="monthSelect"
+          class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+          [value]="selectedYear() + '-' + selectedMonth()"
+          (change)="onMonthChange($any($event.target).value)">
+          @for (month of availableMonths(); track month.value) {
+            <option [value]="month.value">{{ month.label }}</option>
+          }
+        </select>
       }
-    </select>
+      
+      <!-- Year Selector (only for yearly view) -->
+      @if (viewMode() === 'yearly') {
+        <label for="yearSelect" class="text-sm font-medium text-gray-700">{{ 'YEAR' | translate }}:</label>
+        <select 
+          id="yearSelect"
+          class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+          [value]="selectedYear()"
+          (change)="selectedYear.set(+$any($event.target).value)">
+          @for (year of availableYears(); track year) {
+            <option [value]="year">{{ year }}</option>
+          }
+        </select>
+      }
+    </div>
+  </div>
+
+  <!-- Comparison Mode Selector -->
+  <div class="bg-white p-4 rounded-lg shadow-md">
+    <div class="flex items-center gap-4">
+      <label class="text-sm font-medium text-gray-700">{{ 'COMPARISON_PERIODS' | translate }}</label>
+      
+      <div class="flex gap-2">
+        <button 
+          (click)="toggleComparisonMode('none')"
+          [class]="comparisonMode() === 'none' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
+          class="px-4 py-2 rounded-md text-sm font-medium transition-colors hover:opacity-80">
+          {{ 'NO_COMPARISON' | translate }}
+        </button>
+        <button 
+          (click)="toggleComparisonMode('month')"
+          [class]="comparisonMode() === 'month' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
+          class="px-4 py-2 rounded-md text-sm font-medium transition-colors hover:opacity-80">
+          📅 {{ 'MONTH_VS_MONTH' | translate }}
+        </button>
+        <button 
+          (click)="toggleComparisonMode('year')"
+          [class]="comparisonMode() === 'year' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
+          class="px-4 py-2 rounded-md text-sm font-medium transition-colors hover:opacity-80">
+          📆 {{ 'YEAR_VS_YEAR' | translate }}
+        </button>
+      </div>
+
+      @if (comparisonMode() === 'month') {
+        <div class="flex items-center gap-2 ml-4">
+          <label class="text-sm text-gray-600">{{ 'COMPARE_WITH' | translate }}</label>
+          <select 
+            class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+            [value]="comparisonYear() + '-' + comparisonMonth()"
+            (change)="onComparisonMonthChange($any($event.target).value)">
+            @for (month of availableMonths(); track month.value) {
+              <option [value]="month.value">{{ month.label }}</option>
+            }
+          </select>
+        </div>
+      }
+
+      @if (comparisonMode() === 'year') {
+        <div class="flex items-center gap-2 ml-4">
+          <label class="text-sm text-gray-600">{{ 'COMPARE_WITH_YEAR' | translate }}</label>
+          <select 
+            class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+            [value]="comparisonYear()"
+            (change)="comparisonYear.set(+$any($event.target).value)">
+            @for (year of availableYears(); track year) {
+              <option [value]="year">{{ year }}</option>
+            }
+          </select>
+        </div>
+      }
+    </div>
   </div>
 </div>
 
 @if (devices().length > 0) {
+  <!-- Comparison Delta Cards -->
+  @if (comparisonMode() !== 'none' && comparisonDelta()) {
+    <div class="bg-gradient-to-r from-purple-50 to-blue-50 p-6 rounded-lg shadow-md mb-6">
+      <h2 class="text-xl font-semibold text-gray-800 mb-4">
+        📊 Porovnanie: {{ currentPeriodLabel() }} vs. 
+        @if (comparisonMode() === 'month') {
+          {{ comparisonMonthLabel() }}
+        } @else {
+          rok {{ comparisonYearLabel() }}
+        }
+      </h2>
+      
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Delta Hours -->
+        <div class="bg-white p-4 rounded-lg">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm text-gray-600">Zmena downtime</span>
+            @if (comparisonDelta()!.hoursImproved) {
+              <span class="text-green-600">📉 Zlepšenie</span>
+            } @else {
+              <span class="text-red-600">📈 Zhoršenie</span>
+            }
+          </div>
+          <div class="text-2xl font-bold" [class]="comparisonDelta()!.hoursImproved ? 'text-green-600' : 'text-red-600'">
+            {{ comparisonDelta()!.hoursImproved ? '' : '+' }}{{ comparisonDelta()!.hours }}h
+          </div>
+          <div class="text-xs text-gray-500 mt-1">
+            {{ totalStats().totalHours }}h vs. {{ comparisonTotalStats()!.totalHours }}h
+          </div>
+        </div>
+
+        <!-- Delta Percentage -->
+        <div class="bg-white p-4 rounded-lg">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm text-gray-600">Zmena %</span>
+            @if (comparisonDelta()!.percentageImproved) {
+              <span class="text-green-600">✓ Lepšie</span>
+            } @else {
+              <span class="text-red-600">✗ Horšie</span>
+            }
+          </div>
+          <div class="text-2xl font-bold" [class]="comparisonDelta()!.percentageImproved ? 'text-green-600' : 'text-red-600'">
+            {{ comparisonDelta()!.percentageImproved ? '' : '+' }}{{ comparisonDelta()!.percentage }}%
+          </div>
+          <div class="text-xs text-gray-500 mt-1">
+            {{ totalStats().averagePercentage }}% vs. {{ comparisonTotalStats()!.averagePercentage }}%
+          </div>
+        </div>
+
+        <!-- Delta Devices Over Target -->
+        <div class="bg-white p-4 rounded-lg">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm text-gray-600">Zariadenia nad cieľom</span>
+            @if (comparisonDelta()!.devicesImproved) {
+              <span class="text-green-600">✓ Menej</span>
+            } @else if (comparisonDelta()!.devicesOver === 0) {
+              <span class="text-gray-600">= Rovnako</span>
+            } @else {
+              <span class="text-red-600">✗ Viac</span>
+            }
+          </div>
+          <div class="text-2xl font-bold" [class]="comparisonDelta()!.devicesImproved ? 'text-green-600' : comparisonDelta()!.devicesOver === 0 ? 'text-gray-600' : 'text-red-600'">
+            {{ comparisonDelta()!.devicesImproved ? '' : '+' }}{{ comparisonDelta()!.devicesOver }}
+          </div>
+          <div class="text-xs text-gray-500 mt-1">
+            {{ totalStats().devicesOverTarget }} vs. {{ comparisonTotalStats()!.devicesOverTarget }}
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
   <!-- Summary Cards -->
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
     <div class="bg-white p-6 rounded-lg shadow-md">
@@ -31,7 +200,7 @@
           </svg>
         </div>
       </div>
-      <p class="text-xs text-gray-500 mt-2">{{ currentMonthLabel() }}</p>
+      <p class="text-xs text-gray-500 mt-2">{{ currentPeriodLabel() }}</p>
     </div>
 
     <div class="bg-white p-6 rounded-lg shadow-md">
@@ -94,6 +263,10 @@
             <th class="py-3 px-4 text-left">{{ 'DEVICE_TYPE' | translate }}</th>
             <th class="py-3 px-4 text-center">{{ 'MAINTENANCE_COUNT' | translate }}</th>
             <th class="py-3 px-4 text-right">{{ 'DOWNTIME' | translate }}</th>
+            @if (comparisonMode() !== 'none') {
+              <th class="py-3 px-4 text-right">Porovnanie</th>
+              <th class="py-3 px-4 text-right">Δ</th>
+            }
             <th class="py-3 px-4 text-right">%</th>
             <th class="py-3 px-4 text-center">{{ 'STATUS' | translate }}</th>
             <th class="py-3 px-4">{{ 'PROGRESS' | translate }}</th>
@@ -124,6 +297,26 @@
                 <div class="font-semibold text-gray-800">{{ stat.totalHours }}h</div>
                 <div class="text-xs text-gray-500">{{ stat.totalMinutes }} min</div>
               </td>
+              @if (comparisonMode() !== 'none') {
+                @for (compStat of comparisonDowntimeStats(); track compStat.device.id) {
+                  @if (compStat.device.id === stat.device.id) {
+                    <td class="py-4 px-4 text-right">
+                      <div class="font-semibold text-gray-600">{{ compStat.totalHours }}h</div>
+                      <div class="text-xs text-gray-500">{{ compStat.totalMinutes }} min</div>
+                    </td>
+                    <td class="py-4 px-4 text-right">
+                      @if (parseFloat(stat.totalHours) - parseFloat(compStat.totalHours) !== 0) {
+                        <div class="font-semibold" [class]="parseFloat(stat.totalHours) < parseFloat(compStat.totalHours) ? 'text-green-600' : 'text-red-600'">
+                          {{ parseFloat(stat.totalHours) < parseFloat(compStat.totalHours) ? '↓' : '↑' }}
+                          {{ Math.abs(parseFloat(stat.totalHours) - parseFloat(compStat.totalHours)).toFixed(1) }}h
+                        </div>
+                      } @else {
+                        <div class="text-gray-400 text-sm">—</div>
+                      }
+                    </td>
+                  }
+                }
+              }
               <td class="py-4 px-4 text-right">
                 <div class="font-semibold" [class]="stat.isOverTarget ? 'text-red-600' : 'text-green-600'">
                   {{ stat.currentPercentage }}%
@@ -172,7 +365,7 @@
       <div class="ml-3">
         <h3 class="text-sm font-medium text-blue-800">{{ 'DOWNTIME_INFO_TITLE' | translate }}</h3>
         <div class="mt-2 text-sm text-blue-700">
-          <p>{{ 'DOWNTIME_INFO_TEXT' | translate }}</p>
+          <p>{{ infoText() }}</p>
         </div>
       </div>
     </div>
