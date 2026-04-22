@@ -87,7 +87,8 @@ export class DeviceListComponent {
   }
 
   getDeviceDowntime(deviceId: string): string {
-    const deviceLogs = this.logs()().filter(log => log.deviceId === deviceId && log.type === 'emergency');
+    const rawLogs = this.logs();
+    const deviceLogs = rawLogs.filter(log => log.deviceId === deviceId && log.type === 'emergency');
     const totalMinutes = deviceLogs.reduce((total, log) => total + (log.durationMinutes || 0), 0);
     const totalHours = totalMinutes / 60;
     return totalHours > 0 ? `${totalHours.toFixed(1)}h` : '0h';
