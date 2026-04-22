@@ -121,6 +121,11 @@ export class DashboardComponent {
         if (!device.nextMaintenance) {
           return false;
         }
+
+        // Nezaradzovať stroje, ktoré sú mimo prevádzky (offline)
+        if (device.status === 'offline') {
+          return false;
+        }
         
         const nextMaintenanceDate = new Date(device.nextMaintenance);
         return nextMaintenanceDate.getMonth() === currentMonth && 
