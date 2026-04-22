@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { DataService } from '../../../services/data.service';
 import { AuthService } from '../../../services/auth.service';
+import { ExportService } from '../../../services/export.service';
 import { NotificationService } from '../../../core/services/notification.service';
 import { TranslatePipe } from '../../../pipes/translate.pipe';
 
@@ -18,12 +19,30 @@ import { TranslatePipe } from '../../../pipes/translate.pipe';
 export class MaintenanceListComponent {
   private dataService = inject(DataService);
   private notificationService = inject(NotificationService);
+  private exportService = inject(ExportService);
   authService = inject(AuthService);
   
   // Use signal directly from DataService that gets updated
   logs = computed(() => this.dataService.getMaintenanceLogsSignal()());
+  devices = computed(() => this.dataService.getDevicesSignal()());
   filterType = signal<'all' | 'scheduled' | 'emergency'>('all');
   filterYear = signal<string>('all');
+  filterMonth = signal<string>('all');
+
+  availableMonths = [
+    { value: '1', label: 'JANUARY' },
+    { value: '2', label: 'FEBRUARY' },
+    { value: '3', label: 'MARCH' },
+    { value: '4', label: 'APRIL' },
+    { value: '5', label: 'MAY' },
+    { value: '6', label: 'JUNE' },
+    { value: '7', label: 'JULY' },
+    { value: '8', label: 'AUGUST' },
+    { value: '9', label: 'SEPTEMBER' },
+    { value: '10', label: 'OCTOBER' },
+    { value: '11', label: 'NOVEMBER' },
+    { value: '12', label: 'DECEMBER' }
+  ];
 
   // Generate available years from logs + current year
   availableYears = computed(() => {
@@ -70,6 +89,17 @@ export class MaintenanceListComponent {
         return logYear === yearNum;
       });
     }
+
+    // Filter by month
+    const month = this.filterMonth();
+    if (month !== 'all') {
+      const monthNum = parseInt(month, 10); // 1-12
+      filtered = filtered.filter(log => {
+        if (!log.date) return false;
+        const logMonth = new Date(log.date).getMonth() + 1; // getMonth() returns 0-11
+        return logMonth === monthNum;
+      });
+    }
     
     return filtered;
   });
@@ -80,6 +110,20 @@ export class MaintenanceListComponent {
 
   setYearFilter(year: string) {
     this.filterYear.set(year);
+  }
+
+  setMonthFilter(month: string) {
+    this.filterMonth.set(month);
+  }
+
+  exportFilteredLogs() {
+    const logsToExport = this.filteredLogs();
+    if (logsToExport.length === 0) {
+      this.notificationService.warning('Žiadne záznamy na export.');
+      return;
+    }
+    const filename = `filtered-maintenance-logs-${new Date().getTime()}.xlsx`;
+    this.exportService.exportMaintenanceLogsToExcel(logsToExport, this.devices(), filename);
   }
 
   deleteLog(logId: string, deviceName: string) {

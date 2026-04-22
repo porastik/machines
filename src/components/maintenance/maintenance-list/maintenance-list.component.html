@@ -1,5 +1,13 @@
 <div class="flex justify-between items-center mb-6">
   <h1 class="text-3xl font-semibold text-gray-800">{{ 'MAINTENANCE_LOG' | translate }}</h1>
+  
+  <button 
+    (click)="exportFilteredLogs()"
+    [disabled]="filteredLogs().length === 0"
+    [class.opacity-50]="filteredLogs().length === 0"
+    class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors shadow flex items-center gap-2">
+    📊 {{ 'EXPORT_ALL_LOGS' | translate }}
+  </button>
 </div>
 
 <div class="bg-white p-6 rounded-lg shadow-md">
@@ -10,18 +18,34 @@
       <button (click)="setFilter('emergency')" [class.border-blue-500]="filterType() === 'emergency'" [class.text-blue-600]="filterType() === 'emergency'" class="px-3 py-2 font-medium text-sm rounded-t-md border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">{{ 'EMERGENCY' | translate }}</button>
     </nav>
     
-    <!-- Year filter -->
-    <div class="flex items-center gap-2">
-      <label class="text-sm text-gray-600 font-medium">{{ 'YEAR' | translate }}:</label>
-      <select 
-        [value]="filterYear()"
-        (change)="setYearFilter($any($event.target).value)"
-        class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-        <option value="all">{{ 'ALL_YEARS' | translate }}</option>
-        @for (year of availableYears(); track year) {
-          <option [value]="year">{{ year }}</option>
-        }
-      </select>
+    <div class="flex items-center gap-4">
+      <!-- Month filter -->
+      <div class="flex items-center gap-2">
+        <label class="text-sm text-gray-600 font-medium">{{ 'MONTH' | translate }}:</label>
+        <select 
+          [value]="filterMonth()"
+          (change)="setMonthFilter($any($event.target).value)"
+          class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          <option value="all">{{ 'ALL_MONTHS' | translate }}</option>
+          @for (month of availableMonths; track month.value) {
+            <option [value]="month.value">{{ month.label | translate }}</option>
+          }
+        </select>
+      </div>
+
+      <!-- Year filter -->
+      <div class="flex items-center gap-2">
+        <label class="text-sm text-gray-600 font-medium">{{ 'YEAR' | translate }}:</label>
+        <select 
+          [value]="filterYear()"
+          (change)="setYearFilter($any($event.target).value)"
+          class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          <option value="all">{{ 'ALL_YEARS' | translate }}</option>
+          @for (year of availableYears(); track year) {
+            <option [value]="year">{{ year }}</option>
+          }
+        </select>
+      </div>
     </div>
   </div>
   
